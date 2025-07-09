@@ -164,7 +164,7 @@ impl Parser {
                 precision: decimal_schema.precision,
                 scale: decimal_schema.scale,
             },
-            Schema::BigDecimal { .. } => TypeIr::BigDecimal,
+            Schema::BigDecimal => TypeIr::BigDecimal,
             Schema::Array(array_schema) => {
                 let inner_type = self.resolve_type(&array_schema.items, context_namespace);
                 TypeIr::Array(Box::new(inner_type))
@@ -375,7 +375,7 @@ fn parse_decimal_string_to_unscaled_bigint(s: &str, scale: usize) -> num_bigint:
     let fractional_part = if parts.len() > 1 { parts[1] } else { "" };
     let mut unscaled_str = String::from(integer_part);
     unscaled_str.push_str(fractional_part);
-    let current_factional_len = fractional_part.len() as usize;
+    let current_factional_len = fractional_part.len();
     if current_factional_len < scale {
         for _ in 0..(scale - current_factional_len) {
             unscaled_str.push('0');
