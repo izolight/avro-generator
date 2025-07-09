@@ -1,34 +1,34 @@
 ---
-source: src/ir.rs
+source: src/parser.rs
 expression: ir_as_json
-input_file: src/test_schemas/04_nested_records.avsc
+input_file: src/test_schemas/01_simple_record.avsc
 ---
 [
   {
     "Record": {
-      "name": "com.example.nested.Order",
+      "name": "com.example.simple.User",
       "doc": null,
       "inner": {
         "fields": [
           {
-            "name": "order_id",
+            "name": "id",
             "doc": null,
             "ty": "Long",
             "default": null
           },
           {
-            "name": "customer",
-            "doc": null,
-            "ty": {
-              "Record": "com.example.nested.Customer"
-            },
-            "default": null
-          },
-          {
-            "name": "shipping_address",
+            "name": "username",
             "doc": null,
             "ty": "String",
             "default": null
+          },
+          {
+            "name": "is_active",
+            "doc": null,
+            "ty": "Boolean",
+            "default": {
+              "Boolean": true
+            }
           }
         ]
       }

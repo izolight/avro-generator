@@ -1,5 +1,5 @@
 ---
-source: src/ir.rs
+source: src/parser.rs
 expression: ir_as_json
 input_file: src/test_schemas/02_logical_types.avsc
 ---
