@@ -88,6 +88,7 @@ pub enum TypeIr {
     Fixed(String),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ValueIr {
     Null,
     Boolean(bool),
@@ -453,4 +454,28 @@ impl Parser {
             },
         }
     }
+}
+
+#[test]
+fn test_default_value_for_array_off_strings() {
+    let parser = Parser::new(&[]);
+    let target_type = TypeIr::Array(Box::new(TypeIr::String));
+    let json_input = serde_json::json!(["a", "b", "c"]);
+
+    let expected_ir = ValueIr::Array(vec![
+        ValueIr::String("a".to_string()),
+        ValueIr::String("b".to_string()),
+        ValueIr::String("c".to_string()),
+    ]);
+    let result_ir = parser.resolve_default_value(&json_input, &target_type);
+    assert_eq!(result_ir, expected_ir);
+}
+
+#[test]
+#[should_panic]
+fn test_default_value_mismatch() {
+    let parser = Parser::new(&[]);
+    let target_type = TypeIr::Int;
+    let json_input = serde_json::json!("not-an-int");
+    parser.resolve_default_value(&json_input, &target_type);
 }
