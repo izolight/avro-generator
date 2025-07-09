@@ -17,6 +17,17 @@ pub enum SchemaIr {
     },
 }
 
+impl SchemaIr {
+    pub fn fqn(&self) -> &str {
+        match self {
+            SchemaIr::Record(r) => &r.name,
+            SchemaIr::Enum(e) => &e.name,
+            SchemaIr::Fixed(f) => &f.name,
+            SchemaIr::Placeholder { fqn, .. } => fqn,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub enum SchemaKind {
     Record,
@@ -168,7 +179,10 @@ impl Parser {
         while let Some((schema, namespace)) = self.processing_queue.pop() {
             self.parse_and_define_schema(&schema, &namespace);
         }
-        self.definitions.into_values().collect()
+        // sort the result deterministically by the fqn
+        let mut result: Vec<SchemaIr> = self.definitions.into_values().collect();
+        result.sort_by_key(|ir| ir.fqn().to_string());
+        result
     }
 
     /// Parsed a named schema (`Record`, `Enum`, `Fixed`) and saves the definition in the internal
