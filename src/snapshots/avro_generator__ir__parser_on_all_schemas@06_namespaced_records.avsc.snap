@@ -1,0 +1,53 @@
+---
+source: src/ir.rs
+expression: ir_as_json
+input_file: src/test_schemas/06_namespaced_records.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.common.Address",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "street",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "city",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "Record": {
+      "name": "com.example.staff.Employee",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "name",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "address",
+            "doc": null,
+            "ty": {
+              "Record": "com.example.common.Address"
+            },
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]

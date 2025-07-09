@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use apache_avro::Schema;
+use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum SchemaIr {
     Record(RecordIr),
     Enum(EnumIr),
@@ -16,14 +17,14 @@ pub enum SchemaIr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum SchemaKind {
     Record,
     Enum,
     Fixed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct NamedType<T> {
     pub name: String,
     pub doc: Option<String>,
@@ -34,12 +35,12 @@ pub type RecordIr = NamedType<RecordDetails>;
 pub type EnumIr = NamedType<EnumDetails>;
 pub type FixedIr = NamedType<FixedDetails>;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct RecordDetails {
     pub fields: Vec<FieldIr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FieldIr {
     pub name: String,
     pub doc: Option<String>,
@@ -47,17 +48,17 @@ pub struct FieldIr {
     pub default: Option<ValueIr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct EnumDetails {
     pub symbols: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FixedDetails {
     pub size: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum TypeIr {
     // Primitives
     Null,
@@ -96,7 +97,7 @@ pub enum TypeIr {
     Fixed(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub enum ValueIr {
     Null,
     Boolean(bool),
@@ -295,7 +296,7 @@ impl Parser {
                 if variants.len() == 2 && variants.iter().any(|v| matches!(v, TypeIr::Null)) {
                     let non_null_type = variants
                         .into_iter()
-                        .find(|v| matches!(v, TypeIr::Null))
+                        .find(|v| !matches!(v, TypeIr::Null))
                         .unwrap();
                     TypeIr::Option(Box::new(non_null_type))
                 } else {
@@ -489,20 +490,25 @@ fn test_default_value_mismatch() {
 }
 
 #[test]
-fn test_recursive_record_schema() {
-    let raw_schema_str = r#"
-    {
-        "type": "record",
-        "name": "LongList",
-        "namespace": "com.example",
-        "fields": [
-            {"name": "value", "type": "long"},
-            {"name": "next", "type": ["null", "com.example.LongList"]}
-        ]
-    }
-    "#;
-    let avro_schema = apache_avro::Schema::parse_str(&raw_schema_str).unwrap();
-    let parser = Parser::new(&[avro_schema]);
-    let schema_ir = parser.parse();
-    insta::assert_debug_snapshot!(schema_ir);
+fn test_parser_on_all_schemas() {
+    insta::glob!("test_schemas/*.avsc", |path| {
+        let raw_schema_str = std::fs::read_to_string(path).unwrap();
+        let json_value: serde_json::Value =
+            serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
+        let schemas = match json_value {
+            serde_json::Value::Array(arr) => {
+                let schema_strs: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                apache_avro::Schema::parse_list(schema_strs.iter().map(|s| s.as_str()))
+            }
+            serde_json::Value::Object(_) => {
+                apache_avro::Schema::parse_str(&raw_schema_str).map(|s| vec![s])
+            }
+            _ => panic!("Schema file is not a vallid JSON objecct or array"),
+        }
+        .unwrap();
+        let parser = Parser::new(&schemas);
+        let schema_ir = parser.parse();
+        let ir_as_json = serde_json::to_string_pretty(&schema_ir).unwrap();
+        insta::assert_snapshot!(ir_as_json);
+    })
 }

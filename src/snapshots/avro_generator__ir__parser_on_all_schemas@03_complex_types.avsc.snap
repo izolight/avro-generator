@@ -1,0 +1,58 @@
+---
+source: src/ir.rs
+expression: ir_as_json
+input_file: src/test_schemas/03_complex_types.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.complex.UserProfile",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "user_id",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "aliases",
+            "doc": null,
+            "ty": {
+              "Array": "String"
+            },
+            "default": null
+          },
+          {
+            "name": "profile_data",
+            "doc": null,
+            "ty": {
+              "Map": "String"
+            },
+            "default": null
+          },
+          {
+            "name": "last_known_ip",
+            "doc": null,
+            "ty": {
+              "Option": "String"
+            },
+            "default": "Null"
+          },
+          {
+            "name": "last_login_type",
+            "doc": null,
+            "ty": {
+              "Union": [
+                "String",
+                "Long"
+              ]
+            },
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "type": "record",
+  "name": "Order",
+  "namespace": "com.example.nested",
+  "fields": [
+    {
+      "name": "order_id",
+      "type": "long"
+    },
+    {
+      "name": "customer",
+      "type": {
+        "type": "record",
+        "name": "Customer",
+        "fields": [
+          {
+            "name": "customer_id",
+            "type": "long"
+          },
+          {
+            "name": "email",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "shipping_address",
+      "type": "string"
+    }
+  ]
+}

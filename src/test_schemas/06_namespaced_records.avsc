@@ -1,0 +1,32 @@
+[
+  {
+    "type": "record",
+    "name": "Address",
+    "namespace": "com.example.common",
+    "fields": [
+      {
+        "name": "street",
+        "type": "string"
+      },
+      {
+        "name": "city",
+        "type": "string"
+      }
+    ]
+  },
+  {
+    "type": "record",
+    "name": "Employee",
+    "namespace": "com.example.staff",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "address",
+        "type": "com.example.common.Address"
+      }
+    ]
+  }
+]

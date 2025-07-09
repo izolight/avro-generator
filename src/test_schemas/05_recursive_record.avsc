@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "Node",
+  "namespace": "com.example.recursive",
+  "fields": [
+    {
+      "name": "value",
+      "type": "string"
+    },
+    {
+      "name": "next",
+      "type": [
+        "null",
+        "com.example.recursive.Node"
+      ],
+      "default": null
+    }
+  ]
+}

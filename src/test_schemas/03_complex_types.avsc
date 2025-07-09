@@ -1,0 +1,40 @@
+{
+  "type": "record",
+  "name": "UserProfile",
+  "namespace": "com.example.complex",
+  "fields": [
+    {
+      "name": "user_id",
+      "type": "long"
+    },
+    {
+      "name": "aliases",
+      "type": {
+        "type": "array",
+        "items": "string"
+      }
+    },
+    {
+      "name": "profile_data",
+      "type": {
+        "type": "map",
+        "values": "string"
+      }
+    },
+    {
+      "name": "last_known_ip",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "last_login_type",
+      "type": [
+        "string",
+        "long"
+      ]
+    }
+  ]
+}

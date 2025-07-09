@@ -1,0 +1,33 @@
+---
+source: src/ir.rs
+expression: ir_as_json
+input_file: src/test_schemas/05_recursive_record.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.recursive.Node",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "value",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "next",
+            "doc": null,
+            "ty": {
+              "Option": {
+                "Record": "com.example.recursive.Node"
+              }
+            },
+            "default": "Null"
+          }
+        ]
+      }
+    }
+  }
+]

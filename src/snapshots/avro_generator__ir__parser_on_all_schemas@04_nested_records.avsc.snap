@@ -1,0 +1,37 @@
+---
+source: src/ir.rs
+expression: ir_as_json
+input_file: src/test_schemas/04_nested_records.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.nested.Order",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "order_id",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "customer",
+            "doc": null,
+            "ty": {
+              "Record": "com.example.nested.Customer"
+            },
+            "default": null
+          },
+          {
+            "name": "shipping_address",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]

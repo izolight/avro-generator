@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.example.simple",
+  "fields": [
+    {
+      "name": "id",
+      "type": "long"
+    },
+    {
+      "name": "username",
+      "type": "string"
+    },
+    {
+      "name": "is_active",
+      "type": "boolean",
+      "default": true
+    }
+  ]
+}

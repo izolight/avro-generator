@@ -1,0 +1,47 @@
+---
+source: src/ir.rs
+expression: ir_as_json
+input_file: src/test_schemas/02_logical_types.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.logical.EventLog",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "event_id",
+            "doc": null,
+            "ty": "Uuid",
+            "default": null
+          },
+          {
+            "name": "event_date",
+            "doc": null,
+            "ty": "Date",
+            "default": null
+          },
+          {
+            "name": "event_time",
+            "doc": null,
+            "ty": "TimeMicros",
+            "default": null
+          },
+          {
+            "name": "created_at",
+            "doc": null,
+            "ty": "TimestampMillis",
+            "default": null
+          },
+          {
+            "name": "total_amount",
+            "doc": null,
+            "ty": "Decimal",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]
