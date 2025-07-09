@@ -82,7 +82,7 @@ pub enum TypeIr {
     LocalTimestampNanos,
     Duration,
     Uuid,
-    Decimal,
+    Decimal { precision: usize, scale: usize },
     BigDecimal,
 
     // Complex types
@@ -119,7 +119,7 @@ pub enum ValueIr {
     LocalTimestampNanos(i64),
     Duration([u8; 12]), // 4 bytes month, 4 bytes days, 4 bytes ms
     Uuid(String),       // String representation of UUID
-    Decimal(Vec<u8>),
+    Decimal(num_bigint::BigInt),
     BigDecimal(String), // String representation of big decimal
     Array(Vec<ValueIr>),
     Map(std::collections::HashMap<String, ValueIr>),
@@ -277,7 +277,10 @@ impl Parser {
             Schema::LocalTimestampNanos => TypeIr::LocalTimestampNanos,
             Schema::Duration => TypeIr::Duration,
             Schema::Uuid => TypeIr::Uuid,
-            Schema::Decimal { .. } => TypeIr::Decimal,
+            Schema::Decimal(decimal_schema) => TypeIr::Decimal {
+                precision: decimal_schema.precision,
+                scale: decimal_schema.scale,
+            },
             Schema::BigDecimal { .. } => TypeIr::BigDecimal,
             Schema::Array(array_schema) => {
                 let inner_type = self.resolve_type(&array_schema.items, context_namespace);
@@ -386,7 +389,25 @@ impl Parser {
             },
 
             // Avro JSON spec encodes bytes/fixed defaults as strings.
-            TypeIr::Bytes | TypeIr::Decimal | TypeIr::Fixed(_) => match json_val {
+            TypeIr::Decimal { precision, scale } => match json_val {
+                serde_json::Value::String(s) => {
+                    let unscaled_big_int = parse_decimal_string_to_unscaled_bigint(s, *scale);
+                    ValueIr::Decimal(unscaled_big_int)
+                }
+                serde_json::Value::Array(bytes_array) => {
+                    let bytes: Vec<u8> = bytes_array
+                        .iter()
+                        .map(|v| v.as_u64().expect("Byte array elements must be numbers") as u8)
+                        .collect();
+                    let unscaled_big_int = num_bigint::BigInt::from_signed_bytes_be(&bytes);
+                    ValueIr::Decimal(unscaled_big_int)
+                }
+                _ => panic!(
+                    "Invalid default value for Decimal: Expected string or byte array, got {:?}",
+                    json_val
+                ),
+            },
+            TypeIr::Bytes | TypeIr::Fixed(_) => match json_val {
                 JsonValue::String(s) => ValueIr::Bytes(s.clone().into_bytes()),
                 _ => panic!("Invalid default for Bytes/Fixed type: {:?}", json_val),
             },
@@ -463,6 +484,24 @@ impl Parser {
             },
         }
     }
+}
+
+fn parse_decimal_string_to_unscaled_bigint(s: &str, scale: usize) -> num_bigint::BigInt {
+    let parts: Vec<&str> = s.split('.').collect();
+    let integer_part = parts[0];
+    let fractional_part = if parts.len() > 1 { parts[1] } else { "" };
+    let mut unscaled_str = String::from(integer_part);
+    unscaled_str.push_str(fractional_part);
+    let current_factional_len = fractional_part.len() as usize;
+    if current_factional_len < scale {
+        for _ in 0..(scale - current_factional_len) {
+            unscaled_str.push('0');
+        }
+    } else if current_factional_len > scale {
+        panic!("Default decimal value has more fractional digits than specified scale");
+    }
+    num_bigint::BigInt::parse_bytes(unscaled_str.as_bytes(), 10)
+        .expect("Failed to parse unscaled decimal strng to BigInt")
 }
 
 #[test]

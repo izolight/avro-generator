@@ -37,7 +37,12 @@ input_file: src/test_schemas/02_logical_types.avsc
           {
             "name": "total_amount",
             "doc": null,
-            "ty": "Decimal",
+            "ty": {
+              "Decimal": {
+                "precision": 5,
+                "scale": 2
+              }
+            },
             "default": null
           }
         ]
