@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Ident, Type, parse_quote};
 
-use crate::ir::{RecordIr, SchemaIr, TypeIr, ValueIr};
+use crate::ir::{EnumIr, FixedIr, RecordIr, SchemaIr, TypeIr, ValueIr};
 
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
@@ -299,6 +299,34 @@ impl CodeGenerator {
             }
 
             #(#default_fns)*
+        }
+    }
+
+    fn generate_enum(&self, enum_ir: &EnumIr) -> TokenStream {
+        let enum_name = self.avro_fqn_to_rust_name(&enum_ir.name);
+        let doc = &enum_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
+        let variants = enum_ir.inner.symbols.iter().map(|symbol| {
+            let variant_name = format_ident!("{}", symbol);
+            quote! { #variant_name }
+        });
+
+        quote! {
+            #doc
+            #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+            pub enum #enum_name {
+                #(#variants),*
+            }
+        }
+    }
+
+    fn generate_fixed(&self, fixed_ir: &FixedIr) -> TokenStream {
+        let type_name = self.avro_fqn_to_rust_name(&fixed_ir.name);
+        let doc = &fixed_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
+        let size = fixed_ir.inner.size;
+
+        quote! {
+            #doc
+            pub type #type_name = [u8; #size];
         }
     }
 
