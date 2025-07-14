@@ -302,7 +302,9 @@ impl CodeGenerator {
         }
     }
 
+    /// Generate a rust enum for a complex avro union
     fn generate_union_enum(&mut self, union_ir_variants: &[TypeIr]) -> (Ident, TokenStream) {
+        // determine stable name
         let mut sorted_rust_types: Vec<String> = union_ir_variants
             .iter()
             .map(|ty_ir| self.map_type_ir_to_rust_type(ty_ir).to_string())
@@ -311,13 +313,15 @@ impl CodeGenerator {
 
         let union_enum_name_str = format!("Union{}", sorted_rust_types.join(""));
         let union_enum_name = format_ident!("{}", union_enum_name_str);
+        // check if this enum has already been generated
         if let Some(existing_tokens) = self.generated_union_enums.get(&union_enum_name_str) {
             return (union_enum_name, existing_tokens.clone());
         }
 
-        let variants = union_ir_variants.iter().map(|ty_ir| {
+        let mut variants_data = Vec::new();
+        for (index, ty_ir) in union_ir_variants.iter().enumerate() {
             let rust_type = self.map_type_ir_to_rust_type(ty_ir);
-            let variant_name = match ty_ir {
+            let variant_ident = match ty_ir {
                 TypeIr::String => format_ident!("String"),
                 TypeIr::Long => format_ident!("Long"),
                 TypeIr::Int => format_ident!("Int"),
@@ -346,24 +350,163 @@ impl CodeGenerator {
                 TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn),
                 TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn),
                 TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn),
+                _ => format_ident!("UnknownType{}", index),
             };
-            quote! { #variant_name(#rust_type) }
-        });
+
+            let serde_vistor_method = match ty_ir {
+                TypeIr::Boolean => Some(format_ident!("visit_bool")),
+                TypeIr::Int => Some(format_ident!("visit_i32")),
+                TypeIr::Long => Some(format_ident!("visit_i64")),
+                TypeIr::Float => Some(format_ident!("visit_f32")),
+                TypeIr::Double => Some(format_ident!("visit_f64")),
+                TypeIr::String => Some(format_ident!("visit_str")),
+                TypeIr::Bytes => Some(format_ident!("visit_bytes")),
+                _ => None,
+            };
+            variants_data.push((index as u32, variant_ident, rust_type, serde_vistor_method));
+        }
+        let enum_variants = variants_data
+            .iter()
+            .map(|(_, variant_ident, rust_type, _)| {
+                quote! { #variant_ident(#rust_type) }
+            });
+
+        let from_impls = variants_data
+            .iter()
+            .map(|(_, variant_ident, rust_type, _)| {
+                quote! {
+                    impl From<#rust_type> for #union_enum_name {
+                        fn from(v: #rust_type) -> Self {
+                            Self::#variant_ident(v)
+                        }
+                    }
+                }
+            });
+
+        let try_from_impls = variants_data
+            .iter()
+            .map(|(_, variant_ident, rust_type, _)| {
+                if union_ir_variants.len() == 1 {
+                    quote! {
+                        impl From<#union_enum_name> for #rust_type {
+                            fn from(v: #union_enum_name) -> Self {
+                                let #union_enum_name::#variant_ident(v) = v;
+                                v
+                            }
+                        }
+                    }
+                } else {
+                    quote! {
+                        impl TryFrom<#union_enum_name> for #rust_type {
+                            type Error = #union_enum_name;
+
+                            fn try_from(v: #union_enum_name) -> Result<Self, Self::Error> {
+                                if let #union_enum_name::#variant_ident(v) = v {
+                                    Ok(v)
+                                } else {
+                                    Err(v)
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        let visitor_methods = variants_data.iter().filter_map(
+            |(index, variant_ident, rust_type, serde_visitor_method)| {
+                serde_visitor_method.as_ref().map(|method_name| {
+                    let visit_type = match method_name.to_string().as_str() {
+                        "visit_str" => quote! { &str },
+                        "visit_bytes" => quote! { &[u8] },
+                        _ => quote! { #rust_type },
+                    };
+                    quote! {
+                        fn #method_name<E>(selff, value: #visit_type) -> Result<Self::Value, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            Ok(#union_enum_name::#variant_ident(value.into()))
+                        }
+                    }
+                })
+            },
+        );
 
         let enum_definition = quote! {
-            pub enumb #union_enum_name {
-                #(#variants),*
+            #[derive(Debug, PartialEq, Clone)]
+            #[serde(remote = "Self")]
+            pub enum #union_enum_name {
+                #(#enum_variants),*
             }
+
+            #(#from_impls)*
+            #(#try_from_impls)*
 
             impl serde::Serialize for #union_enum_name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
                     S: serde::Serializer,
                 {
+                    // helper ffor inner value
+                    struct NewtypeVariantSerializer<S>(S);
+                    impl<S> serde::Serializer for NewtypeVariantSerializer<S>
+                        where
+                        S: serde::Serializer,
+                    {
+                        type Ok = S::Ok;
+                        type Error = S::Error;
+                        type SerializeSeq = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeTuple = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeTupleStruct = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeTupleVariant = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeMap = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeStruct = serde::ser::Impossible<S::Ok, S::Error>;
+                        type SerializeStructVariant = serde::ser::Impossible<S::Ok, S::Error>;
+
+                        // Implement only `serialize_newtype_variant` to pass through the inner value
+                        fn serialize_newtype_variant<T: ?Sized + serde::Serialize>(
+                            self,
+                            _name: &'static str,
+                            _variant_index: u32,
+                            _variant: &'static str,
+                            value: &T,
+                        ) -> Result<Self::Ok, Self::Error> {
+                            value.serialize(self.0)
+                        }
+
+                        // All other methods are unimplemented as they are not used for newtype variants
+                        fn serialize_bool(self, _v: bool) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_u8(self, _v: u8) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_none(self) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_some<T: ?Sized + serde::Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error>{ unimplemented!() }
+                        fn serialize_unit(self) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_unit_variant(self ,_name: &'static str, _variant_index: u32, _variant: &'static str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_newtype_struct<T: ?Sized + serde::Serialize>(self, _name: &'static str, _value: &T,) -> Result<Self::Ok, Self::Error> { unimplemented!() }
+                        fn serialize_seq(self,_len: Option<usize>,) -> Result<Self::SerializeSeq, Self::Error> { unimplemented!() }
+                        fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> { unimplemented!() }
+                        fn serialize_tuple_struct(self,_name: &'static str,_len: usize) -> Result<Self::SerializeTupleStruct, Self::Error>{ unimplemented!() }
+                        fn serialize_tuple_variant(self,_name: &'static str,_variant_index: u32,_variant: &'static str,_len: usize) ->Result<Self::SerializeTupleVariant, Self::Error> { unimplemented!() }
+                        fn serialize_map(self,_len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> { unimplemented!() }
+                        fn serialize_struct(self,_name: &'static str,_len: usize) -> Result<Self::SerializeStruct, Self::Error> {unimplemented!() }
+                        fn serialize_struct_variant(self,_name: &'static str,_variant_index: u32,_variant: &'static str,_len: usize) ->Result<Self::SerializeStructVariant, Self::Error> { unimplemented!() }
+                    }
                     match self {
                         #(
-                            #union_enum_name::#variants => {
-                                unimplemented!("custon avro union serialization needed for #union_enum_name");
+                            #union_enum_name::#variant_ident(value) => {
+                                value.serialize(NewtypeVariantSerializer(serializer))
                             }
                         )*
                     }
@@ -375,7 +518,19 @@ impl CodeGenerator {
                 where
                     D: serde::Deserializer<'de>,
                 {
-                    unimplemented!("custom avrounion deserialization needed for #union_enum_name");
+                    struct UnionVisitor;
+
+                    impl<'de> serde::de::Visitor<'de> for UnionVisitor {
+                        type Value = #union_enum_name;
+
+                        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                            formatter::write_str(format!(" {}", stringify!(#union_enum_name)).as_str())
+                        }
+
+                        #(#visitor_methods)*
+                    }
+
+                    deserializer.deserialize_any(UnionVisitor)
                 }
             }
         };
