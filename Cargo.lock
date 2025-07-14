@@ -70,6 +70,7 @@ dependencies = [
  "chrono",
  "insta",
  "num-bigint",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "serde",

@@ -105,6 +105,7 @@ pub enum TypeIr {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+#[allow(dead_code)]
 pub enum ValueIr {
     Null,
     Boolean(bool),

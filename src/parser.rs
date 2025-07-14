@@ -272,7 +272,7 @@ impl Parser {
             },
 
             // Avro JSON spec encodes bytes/fixed defaults as strings.
-            TypeIr::Decimal { precision, scale } => match json_val {
+            TypeIr::Decimal { precision: _, scale } => match json_val {
                 serde_json::Value::String(s) => {
                     let unscaled_big_int = parse_decimal_string_to_unscaled_bigint(s, *scale);
                     ValueIr::Decimal(unscaled_big_int)

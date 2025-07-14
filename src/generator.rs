@@ -18,7 +18,7 @@ impl CodeGenerator {
     }
 
     /// Generates a TokenStream for a single SchemaIr
-    pub fn generate_schema(&self, schema_ir: &SchemaIr) -> TokenStream {
+    pub fn generate_schema(&mut self, schema_ir: &SchemaIr) -> TokenStream {
         match schema_ir {
             SchemaIr::Record(record_ir) => self.generate_record(record_ir),
             SchemaIr::Enum(enum_ir) => self.generate_enum(enum_ir),
@@ -30,7 +30,7 @@ impl CodeGenerator {
     }
 
     /// Generates a TokenStream for alll schemas, typically wrapped in modules
-    pub fn generate_all_schemas(&self, schemas: &[SchemaIr]) -> TokenStream {
+    pub fn generate_all_schemas(&mut self, schemas: &[SchemaIr]) -> TokenStream {
         let mut all_code = TokenStream::new();
         // Group schemas by namespace to create modules
         let mut namespaces: std::collections::BTreeMap<String, Vec<&SchemaIr>> =
@@ -184,7 +184,11 @@ impl CodeGenerator {
             ValueIr::Duration(d) => quote! { apache_avro::Duration::new([#(#d),*]) },
             ValueIr::Uuid(s) => quote! { uuid::Uuid::parse_str(#s).unwrap() },
             ValueIr::Decimal(big_int) => {
-                if let TypeIr::Decimal { precision, scale } = target_type {
+                if let TypeIr::Decimal {
+                    precision: _,
+                    scale,
+                } = target_type
+                {
                     let s_str = big_int.to_string();
                     quote! { rust_decimal::Decimal::from_str(#s_str).unwrap().with_scale(#scale as u32) }
                 } else {
@@ -250,10 +254,12 @@ impl CodeGenerator {
 
     /// Helper to convert a fully qualified Avro name to a Rust struct/enum name.
     /// e.g., "com.example.MyRecord" -> `MyRecord`
-    fn generate_record(&self, record_ir: &RecordIr) -> TokenStream {
+    fn generate_record(&mut self, record_ir: &RecordIr) -> TokenStream {
         let struct_name = self.avro_fqn_to_rust_name(&record_ir.name);
         let doc = &record_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
-        let fields = record_ir.inner.fields.iter().map(|field| {
+
+        let mut field_tokens = Vec::new();
+        for field in &record_ir.inner.fields {
             let field_name = format_ident!("{}", field.name);
             let field_type = self.map_type_ir_to_rust_type(&field.ty);
             let field_doc = &field.doc.as_ref().map(|d| quote! { #[doc = #d] });
@@ -264,38 +270,32 @@ impl CodeGenerator {
                 quote! {}
             };
 
-            quote! {
+            field_tokens.push(quote! {
                 #field_doc
                 #default_attr
                 pub #field_name: #field_type,
-            }
-        });
+            });
+        }
 
-        let default_fns: Vec<TokenStream> = record_ir
-            .inner
-            .fields
-            .iter()
-            .filter_map(|field| {
-                if let Some(default_val_ir) = &field.default {
-                    let fn_name = format_ident!("defult_{}", field.name);
-                    let field_type = self.map_type_ir_to_rust_type(&field.ty);
-                    let default_expr = self.generate_default_value_expr(default_val_ir, &field.ty);
-                    Some(quote! {
-                        fn #fn_name() -> #field_type {
-                            #default_expr
-                        }
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let mut default_fns = Vec::new();
+        for field in &record_ir.inner.fields {
+            if let Some(default_val_ir) = &field.default {
+                let fn_name = format_ident!("default_{}", field.name);
+                let field_type = self.map_type_ir_to_rust_type(&field.ty);
+                let default_expr = self.generate_default_value_expr(default_val_ir, &field.ty);
+                default_fns.push(quote! {
+                    fn #fn_name() -> #field_type {
+                        #default_expr
+                    }
+                });
+            }
+        }
 
         quote! {
             #doc
             #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
             pub struct #struct_name {
-                #(#fields),*
+                #(#field_tokens),*
             }
 
             #(#default_fns)*
@@ -335,7 +335,10 @@ impl CodeGenerator {
         // determine stable name
         let mut sorted_rust_types: Vec<String> = union_ir_variants
             .iter()
-            .map(|ty_ir| self.map_type_ir_to_rust_type(ty_ir).to_string())
+            .map(|ty_ir| {
+                let rust_type = self.map_type_ir_to_rust_type(ty_ir);
+                quote!(#rust_type).to_string()
+            })
             .collect();
         sorted_rust_types.sort();
 
@@ -378,7 +381,6 @@ impl CodeGenerator {
                 TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn),
                 TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn),
                 TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn),
-                _ => format_ident!("UnknownType{}", index),
             };
 
             let serde_vistor_method = match ty_ir {
@@ -441,7 +443,7 @@ impl CodeGenerator {
             });
 
         let visitor_methods = variants_data.iter().filter_map(
-            |(index, variant_ident, rust_type, serde_visitor_method)| {
+            |(_index, variant_ident, rust_type, serde_visitor_method)| {
                 serde_visitor_method.as_ref().map(|method_name| {
                     let visit_type = match method_name.to_string().as_str() {
                         "visit_str" => quote! { &str },
@@ -460,6 +462,12 @@ impl CodeGenerator {
             },
         );
 
+        let serialize_arms = variants_data.iter().map(|(_, variant_ident, _, _)| {
+            quote! {
+                Self::#variant_ident(value) => value.serialize(serializer),
+            }
+        });
+
         let enum_definition = quote! {
             #[derive(Debug, PartialEq, Clone)]
             #[serde(remote = "Self")]
@@ -475,68 +483,8 @@ impl CodeGenerator {
                 where
                     S: serde::Serializer,
                 {
-                    // helper ffor inner value
-                    struct NewtypeVariantSerializer<S>(S);
-                    impl<S> serde::Serializer for NewtypeVariantSerializer<S>
-                        where
-                        S: serde::Serializer,
-                    {
-                        type Ok = S::Ok;
-                        type Error = S::Error;
-                        type SerializeSeq = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeTuple = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeTupleStruct = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeTupleVariant = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeMap = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeStruct = serde::ser::Impossible<S::Ok, S::Error>;
-                        type SerializeStructVariant = serde::ser::Impossible<S::Ok, S::Error>;
-
-                        // Implement only `serialize_newtype_variant` to pass through the inner value
-                        fn serialize_newtype_variant<T: ?Sized + serde::Serialize>(
-                            self,
-                            _name: &'static str,
-                            _variant_index: u32,
-                            _variant: &'static str,
-                            value: &T,
-                        ) -> Result<Self::Ok, Self::Error> {
-                            value.serialize(self.0)
-                        }
-
-                        // All other methods are unimplemented as they are not used for newtype variants
-                        fn serialize_bool(self, _v: bool) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_u8(self, _v: u8) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_none(self) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_some<T: ?Sized + serde::Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error>{ unimplemented!() }
-                        fn serialize_unit(self) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_unit_variant(self ,_name: &'static str, _variant_index: u32, _variant: &'static str) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_newtype_struct<T: ?Sized + serde::Serialize>(self, _name: &'static str, _value: &T,) -> Result<Self::Ok, Self::Error> { unimplemented!() }
-                        fn serialize_seq(self,_len: Option<usize>,) -> Result<Self::SerializeSeq, Self::Error> { unimplemented!() }
-                        fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> { unimplemented!() }
-                        fn serialize_tuple_struct(self,_name: &'static str,_len: usize) -> Result<Self::SerializeTupleStruct, Self::Error>{ unimplemented!() }
-                        fn serialize_tuple_variant(self,_name: &'static str,_variant_index: u32,_variant: &'static str,_len: usize) ->Result<Self::SerializeTupleVariant, Self::Error> { unimplemented!() }
-                        fn serialize_map(self,_len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> { unimplemented!() }
-                        fn serialize_struct(self,_name: &'static str,_len: usize) -> Result<Self::SerializeStruct, Self::Error> {unimplemented!() }
-                        fn serialize_struct_variant(self,_name: &'static str,_variant_index: u32,_variant: &'static str,_len: usize) ->Result<Self::SerializeStructVariant, Self::Error> { unimplemented!() }
-                    }
                     match self {
-                        #(
-                            #union_enum_name::#variant_ident(value) => {
-                                value.serialize(NewtypeVariantSerializer(serializer))
-                            }
-                        )*
+                        #(#serialize_arms)*
                     }
                 }
             }
@@ -565,5 +513,40 @@ impl CodeGenerator {
         self.generated_union_enums
             .insert(union_enum_name_str, enum_definition.clone());
         (union_enum_name, enum_definition)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::Parser;
+
+    #[test]
+    fn generator_on_all_schemas() {
+        insta::glob!("test_schemas/*.avsc", |path| {
+            let raw_schema_str = std::fs::read_to_string(path).unwrap();
+            let json_value: serde_json::Value =
+                serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
+            let schemas = match json_value {
+                serde_json::Value::Array(arr) => {
+                    let schema_strs: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                    apache_avro::Schema::parse_list(schema_strs.iter().map(|s| s.as_str()))
+                }
+                serde_json::Value::Object(_) => {
+                    apache_avro::Schema::parse_str(&raw_schema_str).map(|s| vec![s])
+                }
+                _ => panic!("Schema file is not a vallid JSON objecct or array"),
+            }
+            .unwrap();
+
+            let parser = Parser::new(&schemas);
+            let schema_ir = parser.parse();
+
+            let mut generator = CodeGenerator::new();
+            let generated_code = generator.generate_all_schemas(&schema_ir);
+            let formatted_code = prettyplease::unparse(&syn::parse2(generated_code).unwrap());
+
+            insta::assert_snapshot!(formatted_code);
+        })
     }
 }
