@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use syn::{Ident, Type, parse_quote};
 
 use crate::errors::GeneratorError;
-use crate::ir::{EnumIr, FixedIr, RecordIr, SchemaIr, TypeIr, ValueIr, NamedType};
+use crate::ir::{EnumIr, FixedIr, NamedType, RecordIr, SchemaIr, TypeIr, ValueIr};
 
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
@@ -51,7 +51,7 @@ impl CodeGenerator {
             } else {
                 // It's in the global namespace
                 let code = self.generate_schema(schema_ir).map_err(|e| errors.push(e));
-                if let Some(c) = code.ok() {
+                if let Ok(c) = code {
                     root.code.extend(c);
                 }
             }
@@ -64,7 +64,7 @@ impl CodeGenerator {
         Ok(root.to_token_stream())
     }
 
-    fn avro_fqn_to_rust_path(&self, fqn: &str) -> Type {
+    fn avro_fqn_to_rust_path(&self, fqn: &str) -> Result<Type, GeneratorError> {
         let fqn_parts: Vec<&str> = fqn.split('.').collect();
         let current_schema_fqn_parts: Vec<&str> = self.current_schema_fqn.split('.').collect();
 
@@ -73,11 +73,19 @@ impl CodeGenerator {
             current_schema_fqn_parts[..current_schema_fqn_parts.len() - 1].join("::");
 
         if fqn_namespace == current_schema_namespace {
-            let name = format_ident!("{}", fqn_parts.last().unwrap());
-            parse_quote! { #name }
+            let name = format_ident!(
+                "{}",
+                fqn_parts
+                    .last()
+                    .ok_or_else(|| GeneratorError::MismatchedDefaultType {
+                        expected: "non-empty FQN".to_string(),
+                        found: fqn.to_string()
+                    })?
+            );
+            Ok(parse_quote! { #name })
         } else {
             let parts: Vec<Ident> = fqn.split('.').map(|s| format_ident!("{}", s)).collect();
-            parse_quote! { #(#parts)::* }
+            Ok(parse_quote! { #(#parts)::* })
         }
     }
 
@@ -136,9 +144,9 @@ impl CodeGenerator {
                 let (union_enum_name, enum_tokens) = self.generate_union_enum(variants)?;
                 Ok((parse_quote! { #union_enum_name }, Some(enum_tokens)))
             }
-            TypeIr::Record(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
-            TypeIr::Enum(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
-            TypeIr::Fixed(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
+            TypeIr::Record(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
+            TypeIr::Enum(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
+            TypeIr::Fixed(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
         }
     }
 
@@ -240,7 +248,7 @@ impl CodeGenerator {
             }
             ValueIr::Enum(s) => {
                 let enum_path = if let TypeIr::Enum(fqn) = target_type {
-                    self.avro_fqn_to_rust_path(fqn)
+                    self.avro_fqn_to_rust_path(fqn)?
                 } else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Enum".to_string(),
@@ -253,7 +261,7 @@ impl CodeGenerator {
             ValueIr::Fixed(b) => Ok(quote! { [#(#b),*] }),
             ValueIr::Record(map) => {
                 let record_path = if let TypeIr::Record(fqn) = target_type {
-                    self.avro_fqn_to_rust_path(fqn)
+                    self.avro_fqn_to_rust_path(fqn)?
                 } else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Record".to_string(),
@@ -666,13 +674,17 @@ mod tests {
         generator.current_schema_fqn = "com.example.MyRecord".to_string();
         let fqn = "com.example.MyRecord";
         let expected: Type = parse_quote! { MyRecord };
-        let actual = generator.avro_fqn_to_rust_path(fqn);
+        let actual = generator
+            .avro_fqn_to_rust_path(fqn)
+            .expect("Failed to get fqn");
         assert_eq!(quote!(#actual).to_string(), quote!(#expected).to_string());
 
         generator.current_schema_fqn = "com.example.AnotherRecord".to_string();
         let fqn = "com.example.MyRecord";
         let expected: Type = parse_quote! { MyRecord };
-        let actual = generator.avro_fqn_to_rust_path(fqn);
+        let actual = generator
+            .avro_fqn_to_rust_path(fqn)
+            .expect("Failed to get fqn");
         assert_eq!(quote!(#actual).to_string(), quote!(#expected).to_string());
     }
 
@@ -680,7 +692,9 @@ mod tests {
     fn test_avro_fqn_to_rust_name() {
         let fqn = "com.example.MyRecord";
         let expected = format_ident!("MyRecord");
-        let actual = CodeGenerator::new(HashMap::new()).avro_fqn_to_rust_name(fqn).unwrap();
+        let actual = CodeGenerator::new(HashMap::new())
+            .avro_fqn_to_rust_name(fqn)
+            .expect("Failed to get Rust name from FQN");
         assert_eq!(actual, expected);
     }
 
@@ -689,26 +703,42 @@ mod tests {
         let mut generator = CodeGenerator::new(HashMap::new());
 
         // Simple types
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Null).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Null)
+            .expect("Null type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { () }.to_string());
         let (t, _) = generator
             .map_type_ir_to_rust_type(&TypeIr::Boolean)
-            .unwrap();
+            .expect("Boolean type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { bool }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Int).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Int)
+            .expect("Int type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { i32 }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Long).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Long)
+            .expect("Long type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { i64 }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Float).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Float)
+            .expect("Float type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { f32 }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Double).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Double)
+            .expect("Double type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { f64 }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Bytes).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Bytes)
+            .expect("Bytes type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { Vec<u8> }.to_string());
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::String).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::String)
+            .expect("String type mapping failed");
         assert_eq!(quote! { #t }.to_string(), quote! { String }.to_string());
         // Logical types
-        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Date).unwrap();
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Date)
+            .expect("Date type mapping failed");
         assert_eq!(
             quote! { #t }.to_string(),
             quote! { chrono::NaiveDate }.to_string()
@@ -718,7 +748,7 @@ mod tests {
                 precision: 10,
                 scale: 2,
             })
-            .unwrap();
+            .expect("Decimal type mapping failed");
         assert_eq!(
             quote! { #t }.to_string(),
             quote! { rust_decimal::Decimal }.to_string()
@@ -726,7 +756,7 @@ mod tests {
         // Complex types
         let (array_type, _) = generator
             .map_type_ir_to_rust_type(&TypeIr::Array(Box::new(TypeIr::String)))
-            .unwrap();
+            .expect("Array type mapping failed");
         assert_eq!(
             quote!(#array_type).to_string(),
             quote! { Vec<String> }.to_string()
@@ -734,7 +764,7 @@ mod tests {
 
         let (map_type, _) = generator
             .map_type_ir_to_rust_type(&TypeIr::Map(Box::new(TypeIr::Int)))
-            .unwrap();
+            .expect("Map type mapping failed");
         assert_eq!(
             quote!(#map_type).to_string(),
             quote! { std::collections::HashMap<String, i32> }.to_string()
@@ -742,7 +772,7 @@ mod tests {
 
         let (option_type, _) = generator
             .map_type_ir_to_rust_type(&TypeIr::Option(Box::new(TypeIr::Long)))
-            .unwrap();
+            .expect("Option type mapping failed");
         assert_eq!(
             quote!(#option_type).to_string(),
             quote! { Option<i64> }.to_string()
@@ -750,7 +780,7 @@ mod tests {
 
         let (record_type, _) = generator
             .map_type_ir_to_rust_type(&TypeIr::Record("my.Record".to_string()))
-            .unwrap();
+            .expect("Record type mapping failed");
         assert_eq!(
             quote!(#record_type).to_string(),
             quote! { my::Record }.to_string()
@@ -764,22 +794,22 @@ mod tests {
         // Simple values
         let null_expr = generator
             .generate_default_value_expr(&ValueIr::Null, &TypeIr::Option(Box::new(TypeIr::Int)))
-            .unwrap();
+            .expect("Null default value generation failed");
         assert_eq!(null_expr.to_string(), quote! { None }.to_string());
 
         let bool_expr = generator
             .generate_default_value_expr(&ValueIr::Boolean(true), &TypeIr::Boolean)
-            .unwrap();
+            .expect("Boolean default value generation failed");
         assert_eq!(bool_expr.to_string(), quote! { true }.to_string());
 
         let int_expr = generator
             .generate_default_value_expr(&ValueIr::Int(42), &TypeIr::Int)
-            .unwrap();
+            .expect("Int default value generation failed");
         assert_eq!(int_expr.to_string(), quote! { 42i32 }.to_string());
 
         let string_expr = generator
             .generate_default_value_expr(&ValueIr::String("hello".to_string()), &TypeIr::String)
-            .unwrap();
+            .expect("String default value generation failed");
         assert_eq!(
             string_expr.to_string(),
             quote! { "hello".to_string() }.to_string()
@@ -790,7 +820,7 @@ mod tests {
         let array_type = TypeIr::Array(Box::new(TypeIr::Int));
         let array_expr = generator
             .generate_default_value_expr(&array_val, &array_type)
-            .unwrap();
+            .expect("Array default value generation failed");
         assert_eq!(
             array_expr.to_string(),
             quote! { vec![1i32, 2i32] }.to_string()
@@ -803,7 +833,7 @@ mod tests {
         let map_type = TypeIr::Map(Box::new(TypeIr::Int));
         let map_expr = generator
             .generate_default_value_expr(&map_val, &map_type)
-            .unwrap();
+            .expect("Map default value generation failed");
         let expected_map_expr = quote! {
             {
                 let mut m = std::collections::HashMap::new();
@@ -843,9 +873,13 @@ mod tests {
                 ],
             },
         };
-        let generated_code = generator.generate_record(&record_ir).unwrap();
-        let formatted_code =
-            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        let generated_code = generator
+            .generate_record(&record_ir)
+            .expect("Record generation failed");
+        let formatted_code = prettyplease::unparse(
+            &syn::parse2::<File>(generated_code.clone())
+                .expect("Failed to parse generated record code"),
+        );
         insta::assert_snapshot!(formatted_code);
     }
 
@@ -864,9 +898,13 @@ mod tests {
                 ],
             },
         };
-        let generated_code = generator.generate_enum(&enum_ir).unwrap();
-        let formatted_code =
-            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        let generated_code = generator
+            .generate_enum(&enum_ir)
+            .expect("Enum generation failed");
+        let formatted_code = prettyplease::unparse(
+            &syn::parse2::<File>(generated_code.clone())
+                .expect("Failed to parse generated enum code"),
+        );
         insta::assert_snapshot!(formatted_code);
     }
 
@@ -878,9 +916,13 @@ mod tests {
             doc: None,
             inner: FixedDetails { size: 16 },
         };
-        let generated_code = generator.generate_fixed(&fixed_ir).unwrap();
-        let formatted_code =
-            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        let generated_code = generator
+            .generate_fixed(&fixed_ir)
+            .expect("Fixed generation failed");
+        let formatted_code = prettyplease::unparse(
+            &syn::parse2::<File>(generated_code.clone())
+                .expect("Failed to parse generated fixed code"),
+        );
         insta::assert_snapshot!(formatted_code);
     }
 
@@ -888,16 +930,20 @@ mod tests {
     fn test_generate_union_enum() {
         let mut generator = CodeGenerator::new(HashMap::new());
         let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
-        let (_name, generated_code) = generator.generate_union_enum(&union_variants).unwrap();
-        let formatted_code =
-            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        let (_name, generated_code) = generator
+            .generate_union_enum(&union_variants)
+            .expect("Union enum generation failed");
+        let formatted_code = prettyplease::unparse(
+            &syn::parse2::<File>(generated_code.clone())
+                .expect("Failed to parse generated union enum code"),
+        );
         insta::assert_snapshot!(formatted_code);
     }
 
     #[test]
     fn generator_on_all_schemas() {
         insta::glob!("test_schemas/*.avsc", |path| {
-            let raw_schema_str = std::fs::read_to_string(path).unwrap();
+            let raw_schema_str = std::fs::read_to_string(path).expect("Failed to read schema file");
             let json_value: serde_json::Value =
                 serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
             let schemas = match json_value {
@@ -910,7 +956,7 @@ mod tests {
                 }
                 _ => panic!("Schema file is not a vallid JSON objecct or array"),
             }
-            .unwrap();
+            .expect("Failed to parse Avro schema");
 
             let parser = Parser::new(&schemas);
             let definitions = parser.definitions.clone();

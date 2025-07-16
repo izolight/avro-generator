@@ -532,7 +532,7 @@ fn test_default_value_for_array_off_strings() {
         ValueIr::String("b".to_string()),
         ValueIr::String("c".to_string()),
     ]);
-    let result_ir = parser.resolve_default_value(&json_input, &target_type).unwrap();
+    let result_ir = parser.resolve_default_value(&json_input, &target_type).expect("Failed to resolve default value");
     assert_eq!(result_ir, expected_ir);
 }
 
@@ -552,7 +552,7 @@ fn test_default_value_mismatch() {
 #[test]
 fn test_parser_on_all_schemas() {
     insta::glob!("test_schemas/*.avsc", |path| {
-        let raw_schema_str = std::fs::read_to_string(path).unwrap();
+        let raw_schema_str = std::fs::read_to_string(path).expect("Failed to read schema file");
         let json_value: serde_json::Value =
             serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
         let schemas = match json_value {
@@ -565,10 +565,10 @@ fn test_parser_on_all_schemas() {
             }
             _ => panic!("Schema file is not a vallid JSON objecct or array"),
         }
-        .unwrap();
+        .expect("Failed to parse Avro schema");
         let parser = Parser::new(&schemas);
-        let schema_ir = parser.parse().unwrap();
-        let ir_as_json = serde_json::to_string_pretty(&schema_ir).unwrap();
+        let schema_ir = parser.parse().expect("Failed to parse schema IR");
+        let ir_as_json = serde_json::to_string_pretty(&schema_ir).expect("Failed to serialize IR to JSON");
         insta::assert_snapshot!(ir_as_json);
     })
 }

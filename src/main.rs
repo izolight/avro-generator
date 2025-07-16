@@ -1,16 +1,16 @@
+mod errors;
 mod generator;
 mod ir;
 mod parser;
-mod errors;
 
 use std::fs;
 use std::path::PathBuf;
 
-use clap::Parser;
 use apache_avro::Schema;
+use clap::Parser;
 
-use crate::parser::Parser as AvroParser;
 use crate::generator::CodeGenerator;
+use crate::parser::Parser as AvroParser;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for entry in fs::read_dir(&input_path)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "avsc") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "avsc") {
                 let schema_str = fs::read_to_string(&path)?;
                 let schema = Schema::parse_str(&schema_str)?;
                 raw_schemas.push(schema);
@@ -62,7 +62,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let generated_code = generator.generate_all_schemas(&ir_schemas)?;
 
     // For now, print to stdout. In a real scenario, write to files in the output directory.
-    println!("{}", prettyplease::unparse(&syn::parse2(generated_code).unwrap()));
+    let parsed_code = syn::parse2(generated_code)
+        .map_err(|e| format!("Failed to parse generated code: {}", e))?;
+    println!("{}", prettyplease::unparse(&parsed_code));
 
     Ok(())
 }
+
