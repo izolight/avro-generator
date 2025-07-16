@@ -17,29 +17,56 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(raw_schemas: &[Schema]) -> Self {
-        let mut definitions = HashMap::new();
-        let mut processing_queue = Vec::new();
-        for schema in raw_schemas {
+        let mut parser = Self {
+            definitions: HashMap::new(),
+            processing_queue: Vec::new(),
+        };
+        parser.discover_schemas(raw_schemas, None);
+        parser
+    }
+
+    fn discover_schemas(&mut self, schemas: &[Schema], namespace: Option<String>) {
+        for schema in schemas {
+            // For named types, create a placeholder and add to queue
             if let Some(name) = schema.name() {
-                let fqn = name.fullname(schema.namespace());
+                let fqn = name.fullname(namespace.clone());
+                if self.definitions.contains_key(&fqn) {
+                    continue; // Already discovered
+                }
                 let kind = match schema {
                     Schema::Record(_) => SchemaKind::Record,
                     Schema::Enum(_) => SchemaKind::Enum,
                     Schema::Fixed(_) => SchemaKind::Fixed,
-                    _ => continue, // this should never happen
+                    _ => continue,
                 };
                 let placeholder = SchemaIr::Placeholder {
                     fqn: fqn.clone(),
                     kind,
                 };
-                definitions.insert(fqn, placeholder);
+                self.definitions.insert(fqn, placeholder);
+                self.processing_queue
+                    .push((schema.clone(), namespace.clone().unwrap_or_default()));
             }
-            processing_queue.push((schema.clone(), schema.namespace().unwrap_or_default()));
-        }
 
-        Self {
-            definitions,
-            processing_queue,
+            // Recursively discover in complex types
+            match schema {
+                Schema::Record(r) => {
+                    let sub_namespace = r.name.namespace.clone().or(namespace.clone());
+                    for field in &r.fields {
+                        self.discover_schemas(&[field.schema.clone()], sub_namespace.clone());
+                    }
+                }
+                Schema::Array(a) => {
+                    self.discover_schemas(&[*a.items.clone()], namespace.clone());
+                }
+                Schema::Map(m) => {
+                    self.discover_schemas(&[*m.types.clone()], namespace.clone());
+                }
+                Schema::Union(u) => {
+                    self.discover_schemas(u.variants(), namespace.clone());
+                }
+                _ => {}
+            }
         }
     }
 
@@ -189,7 +216,6 @@ impl Parser {
                     TypeIr::Union(variants)
                 }
             }
-            // For named types we just return its name, the parsing is done in the main loop later
             Schema::Record(record_schema) => {
                 let fqn = record_schema
                     .name
