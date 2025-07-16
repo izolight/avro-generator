@@ -1,0 +1,20 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/05_recursive_record.avsc
+---
+pub mod com {
+    pub mod example {
+        pub mod recursive {
+            #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+            pub struct Node {
+                pub value: String,
+                #[serde(default = default_next)]
+                pub next: Option<Node>,
+            }
+            fn default_next() -> Option<Node> {
+                None
+            }
+        }
+    }
+}

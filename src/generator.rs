@@ -24,17 +24,20 @@ pub enum GeneratorError {
 
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
+    current_schema_fqn: String,
 }
 
 impl CodeGenerator {
     pub fn new() -> Self {
         CodeGenerator {
             generated_union_enums: HashMap::new(),
+            current_schema_fqn: String::new(),
         }
     }
 
     /// Generates a TokenStream for a single SchemaIr
     pub fn generate_schema(&mut self, schema_ir: &SchemaIr) -> Result<TokenStream, GeneratorError> {
+        self.current_schema_fqn = schema_ir.fqn().to_string();
         match schema_ir {
             SchemaIr::Record(record_ir) => self.generate_record(record_ir),
             SchemaIr::Enum(enum_ir) => self.generate_enum(enum_ir),
@@ -75,8 +78,20 @@ impl CodeGenerator {
     }
 
     fn avro_fqn_to_rust_path(&self, fqn: &str) -> Type {
-        let parts: Vec<Ident> = fqn.split('.').map(|s| format_ident!("{}", s)).collect();
-        parse_quote! { #(#parts)::* }
+        let fqn_parts: Vec<&str> = fqn.split('.').collect();
+        let current_schema_fqn_parts: Vec<&str> = self.current_schema_fqn.split('.').collect();
+
+        let fqn_namespace = fqn_parts[..fqn_parts.len() - 1].join("::");
+        let current_schema_namespace =
+            current_schema_fqn_parts[..current_schema_fqn_parts.len() - 1].join("::");
+
+        if fqn_namespace == current_schema_namespace {
+            let name = format_ident!("{}", fqn_parts.last().unwrap());
+            parse_quote! { #name }
+        } else {
+            let parts: Vec<Ident> = fqn.split('.').map(|s| format_ident!("{}", s)).collect();
+            parse_quote! { #(#parts)::* }
+        }
     }
 
     fn avro_fqn_to_rust_name(&self, fqn: &str) -> Result<Ident, GeneratorError> {
@@ -625,9 +640,17 @@ mod tests {
 
     #[test]
     fn test_avro_fqn_to_rust_path() {
+        let mut generator = CodeGenerator::new();
+        generator.current_schema_fqn = "com.example.MyRecord".to_string();
         let fqn = "com.example.MyRecord";
-        let expected: Type = parse_quote! { com::example::MyRecord };
-        let actual = CodeGenerator::new().avro_fqn_to_rust_path(fqn);
+        let expected: Type = parse_quote! { MyRecord };
+        let actual = generator.avro_fqn_to_rust_path(fqn);
+        assert_eq!(quote!(#actual).to_string(), quote!(#expected).to_string());
+
+        generator.current_schema_fqn = "com.example.AnotherRecord".to_string();
+        let fqn = "com.example.MyRecord";
+        let expected: Type = parse_quote! { MyRecord };
+        let actual = generator.avro_fqn_to_rust_path(fqn);
         assert_eq!(quote!(#actual).to_string(), quote!(#expected).to_string());
     }
 
@@ -887,3 +910,4 @@ mod tests {
         })
     }
 }
+

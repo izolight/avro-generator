@@ -6,6 +6,28 @@ input_file: src/test_schemas/04_nested_records.avsc
 [
   {
     "Record": {
+      "name": "com.example.nested.Customer",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "customer_id",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "email",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "Record": {
       "name": "com.example.nested.Order",
       "doc": null,
       "inner": {

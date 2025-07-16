@@ -1,0 +1,23 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/06_namespaced_records.avsc
+---
+pub mod com {
+    pub mod example {
+        pub mod common {
+            #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+            pub struct Address {
+                pub street: String,
+                pub city: String,
+            }
+        }
+        pub mod staff {
+            #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+            pub struct Employee {
+                pub name: String,
+                pub address: com::example::common::Address,
+            }
+        }
+    }
+}
