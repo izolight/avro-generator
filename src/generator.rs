@@ -4,23 +4,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Ident, Type, parse_quote};
 
-use thiserror::Error;
-
+use crate::errors::GeneratorError;
 use crate::ir::{EnumIr, FixedIr, RecordIr, SchemaIr, TypeIr, ValueIr};
-
-#[derive(Error, Debug)]
-pub enum GeneratorError {
-    #[error("Placeholder schema found during code generation: {0}")]
-    PlaceholderFound(String),
-    #[error("Mismatched type for default value. Expected {expected}, got {found}")]
-    MismatchedDefaultType { expected: String, found: String },
-    #[error("Decimal default value requires Decimal TypeIr")]
-    DecimalDefaultValueMismatch,
-    #[error("Failed to parse generated code: {0}")]
-    SynError(#[from] syn::Error),
-    #[error("Got multiple errors: {0:?}")]
-    MultipleError(Vec<GeneratorError>),
-}
 
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
@@ -173,7 +158,7 @@ impl CodeGenerator {
             ValueIr::Date(d) => Ok(
                 quote! { chrono::NaiveDateTime::from_ymd_opt(1970, 1, 1)?.checked_add_days(chrono::Days::new(#d as u32))? },
             ),
-            ValueIr::TimeMillis(t) => Ok(quote! { chrono::Duration::millisecnds(#t as i64) }),
+            ValueIr::TimeMillis(t) => Ok(quote! { chrono::Duration::milliseconds(#t as i64) }),
             ValueIr::TimeMicros(t) => Ok(quote! { chrono::Duration::microseconds(#t) }),
             ValueIr::TimestampMillis(t) => {
                 Ok(quote! { chrono::DateTime::<chrono::Utc>::from_timestamp_millis(#t)? })
@@ -891,7 +876,7 @@ mod tests {
             .unwrap();
 
             let parser = Parser::new(&schemas);
-            let schema_ir = parser.parse();
+            let schema_ir = parser.parse().unwrap();
 
             let mut generator = CodeGenerator::new();
             let generated_code = generator.generate_all_schemas(&schema_ir).unwrap();
@@ -910,4 +895,3 @@ mod tests {
         })
     }
 }
-
