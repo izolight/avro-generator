@@ -1,0 +1,15 @@
+---
+source: src/generator.rs
+expression: formatted_code
+---
+///A user record
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct User {
+    pub id: i64,
+    ///The user's username
+    #[serde(default = default_username)]
+    pub username: String,
+}
+fn default_username() -> String {
+    "guest".to_string()
+}

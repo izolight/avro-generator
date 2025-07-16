@@ -1,0 +1,5 @@
+---
+source: src/generator.rs
+expression: formatted_code
+---
+pub type Md5 = [u8; 16usize];

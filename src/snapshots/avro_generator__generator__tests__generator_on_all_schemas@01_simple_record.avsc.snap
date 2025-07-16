@@ -1,0 +1,21 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/01_simple_record.avsc
+---
+pub mod com {
+    pub mod example {
+        pub mod simple {
+            #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+            pub struct User {
+                pub id: i64,
+                pub username: String,
+                #[serde(default = default_is_active)]
+                pub is_active: bool,
+            }
+            fn default_is_active() -> bool {
+                true
+            }
+        }
+    }
+}

@@ -43,7 +43,7 @@ impl CodeGenerator {
         }
     }
 
-    /// Generates a TokenStream for alll schemas, typically wrapped in modules
+    /// Generates a TokenStream for all schemas, typically wrapped in modules
     pub fn generate_all_schemas(
         &mut self,
         schemas: &[SchemaIr],
@@ -75,42 +75,28 @@ impl CodeGenerator {
                 quote! { #(#inner_code)* }
             } else {
                 // create nested modules for namespaces
-                let mut current_module_tokens = TokenStream::new();
-                let mut current_path_parts: Vec<Ident> = Vec::new();
-                for part in namespace.split('.') {
+                let mut errors = vec![];
+                let schemas_code: TokenStream = schemas_in_ns
+                    .iter()
+                    .map(|s| self.generate_schema(s))
+                    .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
+                    .collect();
+                if !errors.is_empty() {
+                    return Err(GeneratorError::MultipleError(errors));
+                }
+
+                let mut namespace_tokens = schemas_code;
+                for part in namespace.split('.').rev() {
                     let module_name = format_ident!("{}", part);
-                    current_path_parts.push(module_name.clone());
-                    // innermost module, generate schemas
-                    let mut errors = vec![];
-                    let inner_code = if current_path_parts.len() == namespace.split('.').count() {
-                        schemas_in_ns
-                            .iter()
-                            .map(|s| self.generate_schema(s))
-                            .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
-                            .collect()
-                    } else {
-                        TokenStream::new()
-                    };
-                    if !errors.is_empty() {
-                        return Err(GeneratorError::MultipleError(errors));
-                    }
-                    current_module_tokens = quote! {
+                    namespace_tokens = quote! {
                         pub mod #module_name {
-                            #current_module_tokens
-                            #inner_code
+                            #namespace_tokens
                         }
                     };
                 }
-                current_module_tokens
+                namespace_tokens
             };
             all_code.extend(namespace_tokens);
-        }
-        // After generating all records/enums/fixed, union enums are generated
-        let mut sorted_union_enums: Vec<(&String, &TokenStream)> =
-            self.generated_union_enums.iter().collect();
-        sorted_union_enums.sort_by_key(|(name, _)| *name);
-        for (_name, tokens) in sorted_union_enums {
-            all_code.extend(tokens.clone());
         }
 
         Ok(all_code)
@@ -131,49 +117,54 @@ impl CodeGenerator {
         })
     }
 
-    // Maps a TypeIr to a Rust Type (TokenStream)
-    fn map_type_ir_to_rust_type(&mut self, ty_ir: &TypeIr) -> Result<Type, GeneratorError> {
+    fn map_type_ir_to_rust_type(
+        &mut self,
+        ty_ir: &TypeIr,
+    ) -> Result<(Type, Option<TokenStream>), GeneratorError> {
         match ty_ir {
-            TypeIr::Null => Ok(parse_quote! { () }),
-            TypeIr::Boolean => Ok(parse_quote! { bool }),
-            TypeIr::Int => Ok(parse_quote! { i32 }),
-            TypeIr::Long => Ok(parse_quote! { i64 }),
-            TypeIr::Float => Ok(parse_quote! { f32 }),
-            TypeIr::Double => Ok(parse_quote! { f64 }),
-            TypeIr::Bytes => Ok(parse_quote! { Vec<u8>}),
-            TypeIr::String => Ok(parse_quote! { String }),
-            TypeIr::Date => Ok(parse_quote! { chrono::NaiveDate }),
-            TypeIr::TimeMillis => Ok(parse_quote! { chrono::Duration }),
-            TypeIr::TimeMicros => Ok(parse_quote! { chrono::Duration }),
-            TypeIr::TimestampMillis => Ok(parse_quote! { chrono::DateTime<chrono::Utc> }),
-            TypeIr::TimestampMicros => Ok(parse_quote! { chrono::DateTime<chrono::Utc> }),
-            TypeIr::TimestampNanos => Ok(parse_quote! { chrono::DateTime<chrono::Utc> }),
-            TypeIr::LocalTimestampMillis => Ok(parse_quote! { chrono::NaiveDateTime }),
-            TypeIr::LocalTimestampMicros => Ok(parse_quote! { chrono::NaiveDateTime }),
-            TypeIr::LocalTimestampNanos => Ok(parse_quote! { chrono::NaiveDateTime }),
-            TypeIr::Duration => Ok(parse_quote! { apache_avro::Duration }),
-            TypeIr::Uuid => Ok(parse_quote! { uuid::Uuid }),
-            TypeIr::Decimal { .. } => Ok(parse_quote! { rust_decimal::Decimal }),
-            TypeIr::BigDecimal => Ok(parse_quote! { bigdecimal::BigDecimal }),
+            TypeIr::Null => Ok((parse_quote! { () }, None)),
+            TypeIr::Boolean => Ok((parse_quote! { bool }, None)),
+            TypeIr::Int => Ok((parse_quote! { i32 }, None)),
+            TypeIr::Long => Ok((parse_quote! { i64 }, None)),
+            TypeIr::Float => Ok((parse_quote! { f32 }, None)),
+            TypeIr::Double => Ok((parse_quote! { f64 }, None)),
+            TypeIr::Bytes => Ok((parse_quote! { Vec<u8> }, None)),
+            TypeIr::String => Ok((parse_quote! { String }, None)),
+            TypeIr::Date => Ok((parse_quote! { chrono::NaiveDate }, None)),
+            TypeIr::TimeMillis => Ok((parse_quote! { chrono::Duration }, None)),
+            TypeIr::TimeMicros => Ok((parse_quote! { chrono::Duration }, None)),
+            TypeIr::TimestampMillis => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
+            TypeIr::TimestampMicros => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
+            TypeIr::TimestampNanos => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
+            TypeIr::LocalTimestampMillis => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
+            TypeIr::LocalTimestampMicros => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
+            TypeIr::LocalTimestampNanos => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
+            TypeIr::Duration => Ok((parse_quote! { apache_avro::Duration }, None)),
+            TypeIr::Uuid => Ok((parse_quote! { uuid::Uuid }, None)),
+            TypeIr::Decimal { .. } => Ok((parse_quote! { rust_decimal::Decimal }, None)),
+            TypeIr::BigDecimal => Ok((parse_quote! { bigdecimal::BigDecimal }, None)),
             TypeIr::Array(inner) => {
-                let inner_type = self.map_type_ir_to_rust_type(inner)?;
-                Ok(parse_quote! { Vec<#inner_type> })
+                let (inner_type, gen_union) = self.map_type_ir_to_rust_type(inner)?;
+                Ok((parse_quote! { Vec<#inner_type> }, gen_union))
             }
             TypeIr::Map(inner) => {
-                let inner_type = self.map_type_ir_to_rust_type(inner)?;
-                Ok(parse_quote! { std::collections::HashMap<String, #inner_type> })
+                let (inner_type, gen_union) = self.map_type_ir_to_rust_type(inner)?;
+                Ok((
+                    parse_quote! { std::collections::HashMap<String, #inner_type> },
+                    gen_union,
+                ))
             }
             TypeIr::Option(inner) => {
-                let inner_type = self.map_type_ir_to_rust_type(inner)?;
-                Ok(parse_quote! { Option<#inner_type> })
+                let (inner_type, gen_union) = self.map_type_ir_to_rust_type(inner)?;
+                Ok((parse_quote! { Option<#inner_type> }, gen_union))
             }
             TypeIr::Union(variants) => {
-                let (union_enum_name, _enum_tokens) = self.generate_union_enum(variants)?;
-                Ok(parse_quote! { #union_enum_name })
+                let (union_enum_name, enum_tokens) = self.generate_union_enum(variants)?;
+                Ok((parse_quote! { #union_enum_name }, Some(enum_tokens)))
             }
-            TypeIr::Record(fqn) => Ok(self.avro_fqn_to_rust_path(fqn)),
-            TypeIr::Enum(fqn) => Ok(self.avro_fqn_to_rust_path(fqn)),
-            TypeIr::Fixed(fqn) => Ok(self.avro_fqn_to_rust_path(fqn)),
+            TypeIr::Record(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
+            TypeIr::Enum(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
+            TypeIr::Fixed(fqn) => Ok((self.avro_fqn_to_rust_path(fqn), None)),
         }
     }
 
@@ -317,10 +308,17 @@ impl CodeGenerator {
         let doc = &record_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
 
         let mut field_tokens = Vec::new();
+        let mut union_tokens = TokenStream::new();
+
         for field in &record_ir.inner.fields {
             let field_name = format_ident!("{}", field.name);
             let fn_name = format_ident!("default_{}", field.name);
-            let field_type = self.map_type_ir_to_rust_type(&field.ty)?;
+
+            let (field_type, generated_union) = self.map_type_ir_to_rust_type(&field.ty)?;
+            if let Some(union_code) = generated_union {
+                union_tokens.extend(union_code);
+            }
+
             let field_doc = &field.doc.as_ref().map(|d| quote! { #[doc = #d] });
 
             let default_attr = if field.default.is_some() {
@@ -332,7 +330,7 @@ impl CodeGenerator {
             field_tokens.push(quote! {
                 #field_doc
                 #default_attr
-                pub #field_name: #field_type,
+                pub #field_name: #field_type
             });
         }
 
@@ -340,7 +338,7 @@ impl CodeGenerator {
         for field in &record_ir.inner.fields {
             if let Some(default_val_ir) = &field.default {
                 let fn_name = format_ident!("default_{}", field.name);
-                let field_type = self.map_type_ir_to_rust_type(&field.ty)?;
+                let (field_type, _) = self.map_type_ir_to_rust_type(&field.ty)?;
                 let default_expr = self.generate_default_value_expr(default_val_ir, &field.ty)?;
                 default_fns.push(quote! {
                     fn #fn_name() -> #field_type {
@@ -358,6 +356,8 @@ impl CodeGenerator {
             }
 
             #(#default_fns)*
+
+            #union_tokens
         })
     }
 
@@ -397,7 +397,7 @@ impl CodeGenerator {
         // determine stable name
         let sorted_rust_types = union_ir_variants
             .iter()
-            .map(|ty_ir| self.map_type_ir_to_rust_type(ty_ir))
+            .map(|ty_ir| self.map_type_ir_to_rust_type(ty_ir).map(|(t, _)| t))
             .collect::<Result<Vec<_>, _>>()?;
         let mut sorted_rust_types: Vec<String> = sorted_rust_types
             .iter()
@@ -415,7 +415,7 @@ impl CodeGenerator {
 
         let mut variants_data = Vec::new();
         for (index, ty_ir) in union_ir_variants.iter().enumerate() {
-            let rust_type = self.map_type_ir_to_rust_type(ty_ir)?;
+            let (rust_type, _) = self.map_type_ir_to_rust_type(ty_ir)?;
             let variant_ident = match ty_ir {
                 TypeIr::String => format_ident!("String"),
                 TypeIr::Long => format_ident!("Long"),
@@ -515,7 +515,7 @@ impl CodeGenerator {
                         _ => quote! { #rust_type },
                     };
                     quote! {
-                        fn #method_name<E>(selff, value: #visit_type) -> Result<Self::Value, E>
+                        fn #method_name<E>(self, value: #visit_type) -> Result<Self::Value, E>
                         where
                             E: serde::de::Error,
                         {
@@ -582,10 +582,240 @@ impl CodeGenerator {
 
 #[cfg(test)]
 mod tests {
-    use syn::File;
-
     use super::*;
+    use crate::ir::{
+        EnumDetails, EnumIr, FieldIr, FixedDetails, FixedIr, RecordDetails, RecordIr, TypeIr,
+        ValueIr,
+    };
     use crate::parser::Parser;
+    use quote::{format_ident, quote};
+    use syn::{File, Type, parse_quote};
+
+    #[test]
+    fn test_avro_fqn_to_rust_path() {
+        let fqn = "com.example.MyRecord";
+        let expected: Type = parse_quote! { com::example::MyRecord };
+        let actual = CodeGenerator::new().avro_fqn_to_rust_path(fqn);
+        assert_eq!(quote!(#actual).to_string(), quote!(#expected).to_string());
+    }
+
+    #[test]
+    fn test_avro_fqn_to_rust_name() {
+        let fqn = "com.example.MyRecord";
+        let expected = format_ident!("MyRecord");
+        let actual = CodeGenerator::new().avro_fqn_to_rust_name(fqn).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_map_type_ir_to_rust_type() {
+        let mut generator = CodeGenerator::new();
+
+        // Simple types
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Null).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { () }.to_string());
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Boolean)
+            .unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { bool }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Int).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { i32 }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Long).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { i64 }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Float).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { f32 }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Double).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { f64 }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Bytes).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { Vec<u8> }.to_string());
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::String).unwrap();
+        assert_eq!(quote! { #t }.to_string(), quote! { String }.to_string());
+        // Logical types
+        let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Date).unwrap();
+        assert_eq!(
+            quote! { #t }.to_string(),
+            quote! { chrono::NaiveDate }.to_string()
+        );
+        let (t, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Decimal {
+                precision: 10,
+                scale: 2,
+            })
+            .unwrap();
+        assert_eq!(
+            quote! { #t }.to_string(),
+            quote! { rust_decimal::Decimal }.to_string()
+        );
+        // Complex types
+        let (array_type, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Array(Box::new(TypeIr::String)))
+            .unwrap();
+        assert_eq!(
+            quote!(#array_type).to_string(),
+            quote! { Vec<String> }.to_string()
+        );
+
+        let (map_type, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Map(Box::new(TypeIr::Int)))
+            .unwrap();
+        assert_eq!(
+            quote!(#map_type).to_string(),
+            quote! { std::collections::HashMap<String, i32> }.to_string()
+        );
+
+        let (option_type, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Option(Box::new(TypeIr::Long)))
+            .unwrap();
+        assert_eq!(
+            quote!(#option_type).to_string(),
+            quote! { Option<i64> }.to_string()
+        );
+
+        let (record_type, _) = generator
+            .map_type_ir_to_rust_type(&TypeIr::Record("my.Record".to_string()))
+            .unwrap();
+        assert_eq!(
+            quote!(#record_type).to_string(),
+            quote! { my::Record }.to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_default_value_expr() {
+        let mut generator = CodeGenerator::new();
+
+        // Simple values
+        let null_expr = generator
+            .generate_default_value_expr(&ValueIr::Null, &TypeIr::Option(Box::new(TypeIr::Int)))
+            .unwrap();
+        assert_eq!(null_expr.to_string(), quote! { None }.to_string());
+
+        let bool_expr = generator
+            .generate_default_value_expr(&ValueIr::Boolean(true), &TypeIr::Boolean)
+            .unwrap();
+        assert_eq!(bool_expr.to_string(), quote! { true }.to_string());
+
+        let int_expr = generator
+            .generate_default_value_expr(&ValueIr::Int(42), &TypeIr::Int)
+            .unwrap();
+        assert_eq!(int_expr.to_string(), quote! { 42i32 }.to_string());
+
+        let string_expr = generator
+            .generate_default_value_expr(&ValueIr::String("hello".to_string()), &TypeIr::String)
+            .unwrap();
+        assert_eq!(
+            string_expr.to_string(),
+            quote! { "hello".to_string() }.to_string()
+        );
+
+        // Array
+        let array_val = ValueIr::Array(vec![ValueIr::Int(1), ValueIr::Int(2)]);
+        let array_type = TypeIr::Array(Box::new(TypeIr::Int));
+        let array_expr = generator
+            .generate_default_value_expr(&array_val, &array_type)
+            .unwrap();
+        assert_eq!(
+            array_expr.to_string(),
+            quote! { vec![1i32, 2i32] }.to_string()
+        );
+
+        // Map
+        let mut map_val_b_tree = std::collections::HashMap::new();
+        map_val_b_tree.insert("a".to_string(), ValueIr::Int(1));
+        let map_val = ValueIr::Map(map_val_b_tree);
+        let map_type = TypeIr::Map(Box::new(TypeIr::Int));
+        let map_expr = generator
+            .generate_default_value_expr(&map_val, &map_type)
+            .unwrap();
+        let expected_map_expr = quote! {
+            {
+                let mut m = std::collections::HashMap::new();
+                m.insert("a".to_string(), 1i32);
+                m
+            }
+        };
+        assert_eq!(
+            map_expr.to_string().replace(" ", "").replace("\n", ""),
+            expected_map_expr
+                .to_string()
+                .replace(" ", "")
+                .replace("\n", "")
+        );
+    }
+
+    #[test]
+    fn test_generate_record() {
+        let mut generator = CodeGenerator::new();
+        let record_ir = RecordIr {
+            name: "com.example.User".to_string(),
+            doc: Some("A user record".to_string()),
+            inner: RecordDetails {
+                fields: vec![
+                    FieldIr {
+                        name: "id".to_string(),
+                        doc: None,
+                        ty: TypeIr::Long,
+                        default: None,
+                    },
+                    FieldIr {
+                        name: "username".to_string(),
+                        doc: Some("The user\'s username".to_string()),
+                        ty: TypeIr::String,
+                        default: Some(ValueIr::String("guest".to_string())),
+                    },
+                ],
+            },
+        };
+        let generated_code = generator.generate_record(&record_ir).unwrap();
+        let formatted_code =
+            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        insta::assert_snapshot!(formatted_code);
+    }
+
+    #[test]
+    fn test_generate_enum() {
+        let generator = CodeGenerator::new();
+        let enum_ir = EnumIr {
+            name: "com.example.Suit".to_string(),
+            doc: Some("Card suit".to_string()),
+            inner: EnumDetails {
+                symbols: vec![
+                    "SPADES".to_string(),
+                    "HEARTS".to_string(),
+                    "DIAMONDS".to_string(),
+                    "CLUBS".to_string(),
+                ],
+            },
+        };
+        let generated_code = generator.generate_enum(&enum_ir).unwrap();
+        let formatted_code =
+            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        insta::assert_snapshot!(formatted_code);
+    }
+
+    #[test]
+    fn test_generate_fixed() {
+        let generator = CodeGenerator::new();
+        let fixed_ir = FixedIr {
+            name: "com.example.Md5".to_string(),
+            doc: None,
+            inner: FixedDetails { size: 16 },
+        };
+        let generated_code = generator.generate_fixed(&fixed_ir).unwrap();
+        let formatted_code =
+            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        insta::assert_snapshot!(formatted_code);
+    }
+
+    #[test]
+    fn test_generate_union_enum() {
+        let mut generator = CodeGenerator::new();
+        let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
+        let (_name, generated_code) = generator.generate_union_enum(&union_variants).unwrap();
+        let formatted_code =
+            prettyplease::unparse(&syn::parse2::<File>(generated_code.clone()).unwrap());
+        insta::assert_snapshot!(formatted_code);
+    }
 
     #[test]
     fn generator_on_all_schemas() {

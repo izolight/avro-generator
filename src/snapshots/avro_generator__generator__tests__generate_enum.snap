@@ -1,0 +1,12 @@
+---
+source: src/generator.rs
+expression: formatted_code
+---
+///Card suit
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+pub enum Suit {
+    SPADES,
+    HEARTS,
+    DIAMONDS,
+    CLUBS,
+}
