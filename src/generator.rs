@@ -5,18 +5,20 @@ use quote::{format_ident, quote};
 use syn::{Ident, Type, parse_quote};
 
 use crate::errors::GeneratorError;
-use crate::ir::{EnumIr, FixedIr, RecordIr, SchemaIr, TypeIr, ValueIr};
+use crate::ir::{EnumIr, FixedIr, RecordIr, SchemaIr, TypeIr, ValueIr, NamedType};
 
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
     current_schema_fqn: String,
+    definitions: HashMap<String, SchemaIr>,
 }
 
 impl CodeGenerator {
-    pub fn new() -> Self {
+    pub fn new(definitions: HashMap<String, SchemaIr>) -> Self {
         CodeGenerator {
             generated_union_enums: HashMap::new(),
             current_schema_fqn: String::new(),
+            definitions,
         }
     }
 
@@ -258,10 +260,45 @@ impl CodeGenerator {
                         found: format!("{:?}", target_type),
                     });
                 };
+
+                let record_fqn = if let TypeIr::Record(fqn) = target_type {
+                    fqn
+                } else {
+                    unreachable!("This should be a record type based on the outer match");
+                };
+
+                let record_ir = self.definitions.get(record_fqn).ok_or_else(|| {
+                    GeneratorError::MismatchedDefaultType {
+                        expected: format!("Record definition for {}", record_fqn),
+                        found: "not found".to_string(),
+                    }
+                })?;
+
+                let record_details = if let SchemaIr::Record(NamedType { inner, .. }) = record_ir {
+                    inner
+                } else {
+                    return Err(GeneratorError::MismatchedDefaultType {
+                        expected: format!("RecordIR for {}", record_fqn),
+                        found: format!("{:?}", record_ir),
+                    });
+                };
+
+                let field_types: HashMap<String, TypeIr> = record_details
+                    .fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.ty.clone()))
+                    .collect();
+
                 let fields = map
                     .iter()
                     .map(|(k, v)| {
-                        self.generate_default_value_expr(v, &TypeIr::Null)
+                        let field_type = field_types.get(k).ok_or_else(|| {
+                            GeneratorError::MismatchedDefaultType {
+                                expected: format!("Field type for {}", k),
+                                found: "not found in record definition".to_string(),
+                            }
+                        })?;
+                        self.generate_default_value_expr(v, field_type)
                             .map(|val_expr| {
                                 let field_name = format_ident!("{}", k);
                                 quote! { #field_name: #val_expr }
@@ -625,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_avro_fqn_to_rust_path() {
-        let mut generator = CodeGenerator::new();
+        let mut generator = CodeGenerator::new(HashMap::new());
         generator.current_schema_fqn = "com.example.MyRecord".to_string();
         let fqn = "com.example.MyRecord";
         let expected: Type = parse_quote! { MyRecord };
@@ -643,13 +680,13 @@ mod tests {
     fn test_avro_fqn_to_rust_name() {
         let fqn = "com.example.MyRecord";
         let expected = format_ident!("MyRecord");
-        let actual = CodeGenerator::new().avro_fqn_to_rust_name(fqn).unwrap();
+        let actual = CodeGenerator::new(HashMap::new()).avro_fqn_to_rust_name(fqn).unwrap();
         assert_eq!(actual, expected);
     }
 
     #[test]
     fn test_map_type_ir_to_rust_type() {
-        let mut generator = CodeGenerator::new();
+        let mut generator = CodeGenerator::new(HashMap::new());
 
         // Simple types
         let (t, _) = generator.map_type_ir_to_rust_type(&TypeIr::Null).unwrap();
@@ -722,7 +759,7 @@ mod tests {
 
     #[test]
     fn test_generate_default_value_expr() {
-        let mut generator = CodeGenerator::new();
+        let mut generator = CodeGenerator::new(HashMap::new());
 
         // Simple values
         let null_expr = generator
@@ -785,7 +822,7 @@ mod tests {
 
     #[test]
     fn test_generate_record() {
-        let mut generator = CodeGenerator::new();
+        let mut generator = CodeGenerator::new(HashMap::new());
         let record_ir = RecordIr {
             name: "com.example.User".to_string(),
             doc: Some("A user record".to_string()),
@@ -814,7 +851,7 @@ mod tests {
 
     #[test]
     fn test_generate_enum() {
-        let generator = CodeGenerator::new();
+        let generator = CodeGenerator::new(HashMap::new());
         let enum_ir = EnumIr {
             name: "com.example.Suit".to_string(),
             doc: Some("Card suit".to_string()),
@@ -835,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_generate_fixed() {
-        let generator = CodeGenerator::new();
+        let generator = CodeGenerator::new(HashMap::new());
         let fixed_ir = FixedIr {
             name: "com.example.Md5".to_string(),
             doc: None,
@@ -849,7 +886,7 @@ mod tests {
 
     #[test]
     fn test_generate_union_enum() {
-        let mut generator = CodeGenerator::new();
+        let mut generator = CodeGenerator::new(HashMap::new());
         let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
         let (_name, generated_code) = generator.generate_union_enum(&union_variants).unwrap();
         let formatted_code =
@@ -876,9 +913,10 @@ mod tests {
             .unwrap();
 
             let parser = Parser::new(&schemas);
+            let definitions = parser.definitions.clone();
             let schema_ir = parser.parse().unwrap();
 
-            let mut generator = CodeGenerator::new();
+            let mut generator = CodeGenerator::new(definitions);
             let generated_code = generator.generate_all_schemas(&schema_ir).unwrap();
             let res = syn::parse2::<File>(generated_code.clone());
             if let Err(e) = res {

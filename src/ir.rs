@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum SchemaIr {
     Record(RecordIr),
     Enum(EnumIr),
@@ -24,14 +24,14 @@ impl SchemaIr {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum SchemaKind {
     Record,
     Enum,
     Fixed,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct NamedType<T> {
     pub name: String,
     pub doc: Option<String>,
@@ -42,12 +42,12 @@ pub type RecordIr = NamedType<RecordDetails>;
 pub type EnumIr = NamedType<EnumDetails>;
 pub type FixedIr = NamedType<FixedDetails>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct RecordDetails {
     pub fields: Vec<FieldIr>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FieldIr {
     pub name: String,
     pub doc: Option<String>,
@@ -55,17 +55,17 @@ pub struct FieldIr {
     pub default: Option<ValueIr>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct EnumDetails {
     pub symbols: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct FixedDetails {
     pub size: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum TypeIr {
     // Primitives
     Null,
@@ -104,7 +104,7 @@ pub enum TypeIr {
     Fixed(String),
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 #[allow(dead_code)]
 pub enum ValueIr {
     Null,

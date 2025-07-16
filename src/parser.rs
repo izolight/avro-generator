@@ -11,7 +11,7 @@ use crate::ir::{
 
 pub struct Parser {
     // stores definition of all named types with fully qualified names
-    definitions: HashMap<String, SchemaIr>,
+    pub definitions: HashMap<String, SchemaIr>,
     // queue for schemas that need to be parsed
     processing_queue: Vec<(Schema, String)>,
 }
