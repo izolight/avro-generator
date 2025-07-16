@@ -1,0 +1,78 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/09_union_of_named_and_logical_types.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.EventMetadata",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "source",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "timestamp",
+            "doc": null,
+            "ty": "TimestampMillis",
+            "default": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "Enum": {
+      "name": "com.example.EventType",
+      "doc": null,
+      "inner": {
+        "symbols": [
+          "LOGIN",
+          "LOGOUT",
+          "PURCHASE",
+          "VIEW"
+        ]
+      }
+    }
+  },
+  {
+    "Record": {
+      "name": "com.example.UserActivity",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "userId",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "activityDetails",
+            "doc": null,
+            "ty": {
+              "Union": [
+                "Null",
+                "String",
+                "Int",
+                {
+                  "Record": "com.example.EventMetadata"
+                },
+                {
+                  "Enum": "com.example.EventType"
+                },
+                "TimestampMicros"
+              ]
+            },
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]

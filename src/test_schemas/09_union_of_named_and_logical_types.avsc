@@ -1,0 +1,37 @@
+
+[
+  {
+    "type": "record",
+    "name": "EventMetadata",
+    "namespace": "com.example",
+    "fields": [
+      {"name": "source", "type": "string"},
+      {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+    ]
+  },
+  {
+    "type": "enum",
+    "name": "EventType",
+    "namespace": "com.example",
+    "symbols": ["LOGIN", "LOGOUT", "PURCHASE", "VIEW"]
+  },
+  {
+    "type": "record",
+    "name": "UserActivity",
+    "namespace": "com.example",
+    "fields": [
+      {"name": "userId", "type": "string"},
+      {
+        "name": "activityDetails",
+        "type": [
+          "null",
+          "string",
+          "int",
+          "com.example.EventMetadata",
+          "com.example.EventType",
+          {"type": "long", "logicalType": "timestamp-micros"}
+        ]
+      }
+    ]
+  }
+]
