@@ -36,6 +36,10 @@ pub enum ParserError {
     BigIntParseError(String),
     #[error("Invalid duration string: {0}")]
     InvalidDurationString(String),
+    #[error("Dependency not yet resolved: {0}")]
+    DependencyNotResolved(String),
+    #[error("Circular dependency detected or unresolvable schemas.")]
+    CircularDependencyDetected,
     #[error("Failed to parse JSON: {0}")]
     JsonParseError(#[from] serde_json::Error),
 }

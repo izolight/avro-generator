@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -9,9 +9,9 @@ use crate::ir::{EnumIr, FixedIr, NamedType, RecordIr, SchemaIr, TypeIr, ValueIr}
 
 /// Generates Rust code from an Avro Intermediate Representation (IR).
 pub struct CodeGenerator {
-    generated_union_enums: HashMap<String, TokenStream>,
+    generated_union_enums: BTreeMap<String, TokenStream>,
     current_schema_fqn: String,
-    definitions: HashMap<String, SchemaIr>,
+    definitions: BTreeMap<String, SchemaIr>,
 }
 
 impl CodeGenerator {
@@ -19,10 +19,10 @@ impl CodeGenerator {
     ///
     /// # Arguments
     ///
-    /// * `definitions` - A HashMap containing the definitions of all named schemas.
-    pub fn new(definitions: HashMap<String, SchemaIr>) -> Self {
+    /// * `definitions` - A BTreeMap containing the definitions of all named schemas.
+    pub fn new(definitions: BTreeMap<String, SchemaIr>) -> Self {
         CodeGenerator {
-            generated_union_enums: HashMap::new(),
+            generated_union_enums: BTreeMap::new(),
             current_schema_fqn: String::new(),
             definitions,
         }
@@ -333,7 +333,7 @@ impl CodeGenerator {
                     });
                 };
 
-                let field_types: HashMap<String, TypeIr> = record_details
+                let field_types: BTreeMap<String, TypeIr> = record_details
                     .fields
                     .iter()
                     .map(|f| (f.name.clone(), f.ty.clone()))
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn test_avro_fqn_to_rust_path() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         generator.current_schema_fqn = "com.example.MyRecord".to_string();
         let fqn = "com.example.MyRecord";
         let expected: Type = parse_quote! { MyRecord };
@@ -807,7 +807,7 @@ mod tests {
     fn test_avro_fqn_to_rust_name() {
         let fqn = "com.example.MyRecord";
         let expected = format_ident!("MyRecord");
-        let actual = CodeGenerator::new(HashMap::new())
+        let actual = CodeGenerator::new(BTreeMap::new())
             .avro_fqn_to_rust_name(fqn)
             .expect("Failed to get Rust name from FQN");
         assert_eq!(actual, expected);
@@ -815,7 +815,7 @@ mod tests {
 
     #[test]
     fn test_map_type_ir_to_rust_type() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
 
         // Simple types
         let (t, _) = generator
@@ -904,7 +904,7 @@ mod tests {
 
     #[test]
     fn test_generate_default_value_expr() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
 
         // Simple values
         let null_expr = generator
@@ -942,7 +942,7 @@ mod tests {
         );
 
         // Map
-        let mut map_val_b_tree = std::collections::HashMap::new();
+        let mut map_val_b_tree = std::collections::BTreeMap::new();
         map_val_b_tree.insert("a".to_string(), ValueIr::Int(1));
         let map_val = ValueIr::Map(map_val_b_tree);
         let map_type = TypeIr::Map(Box::new(TypeIr::Int));
@@ -967,7 +967,7 @@ mod tests {
 
     #[test]
     fn test_generate_record() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         let record_ir = RecordIr {
             name: "com.example.User".to_string(),
             doc: Some("A user record".to_string()),
@@ -1000,7 +1000,7 @@ mod tests {
 
     #[test]
     fn test_generate_enum() {
-        let generator = CodeGenerator::new(HashMap::new());
+        let generator = CodeGenerator::new(BTreeMap::new());
         let enum_ir = EnumIr {
             name: "com.example.Suit".to_string(),
             doc: Some("Card suit".to_string()),
@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn test_generate_fixed() {
-        let generator = CodeGenerator::new(HashMap::new());
+        let generator = CodeGenerator::new(BTreeMap::new());
         let fixed_ir = FixedIr {
             name: "com.example.Md5".to_string(),
             doc: None,
@@ -1043,7 +1043,7 @@ mod tests {
 
     #[test]
     fn test_generate_union_enum() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
         let (_name, generated_code) = generator
             .generate_union_enum(&union_variants)
@@ -1059,8 +1059,8 @@ mod tests {
     fn generator_on_all_schemas() {
         insta::glob!("test_schemas/*.avsc", |path| {
             let raw_schema_str = std::fs::read_to_string(path).expect("Failed to read schema file");
-            let json_value: serde_json::Value =
-                serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
+            let json_value: serde_json::Value = serde_json::from_str(&raw_schema_str)
+                .unwrap_or_else(|_| panic!("Failed to parse file as JSON: {raw_schema_str}"));
             let schemas = match json_value {
                 serde_json::Value::Array(arr) => {
                     let schema_strs: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
@@ -1075,9 +1075,11 @@ mod tests {
 
             let parser = Parser::new(&schemas);
             let definitions = parser.definitions.clone();
-            let schema_ir = parser.parse().expect("Failed to parse schema IR in test");
+            let schema_ir = parser
+                .parse()
+                .unwrap_or_else(|_| panic!("Failed to parse schema IR in test: {schemas:?}"));
 
-            let mut generator = CodeGenerator::new(definitions);
+            let mut generator = CodeGenerator::new(definitions.into_iter().collect());
             let generated_code = generator
                 .generate_all_schemas(&schema_ir)
                 .expect("Failed to generate all schemas in test");

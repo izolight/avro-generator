@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use apache_avro::Schema;
 use serde_json::Value as JsonValue;
@@ -12,9 +12,9 @@ use crate::ir::{
 /// Parses Avro schemas into the Intermediate Representation (IR).
 pub struct Parser {
     // stores definition of all named types with fully qualified names
-    pub definitions: HashMap<String, SchemaIr>,
+    pub definitions: BTreeMap<String, SchemaIr>,
     // queue for schemas that need to be parsed
-    processing_queue: Vec<(Schema, String)>,
+    processing_queue: VecDeque<(Schema, String)>,
 }
 
 impl Parser {
@@ -25,8 +25,8 @@ impl Parser {
     /// * `raw_schemas` - A slice of `apache_avro::Schema` to parse.
     pub fn new(raw_schemas: &[Schema]) -> Self {
         let mut parser = Self {
-            definitions: HashMap::new(),
-            processing_queue: Vec::new(),
+            definitions: BTreeMap::new(),
+            processing_queue: VecDeque::new(),
         };
         parser.discover_schemas(raw_schemas, None);
         parser
@@ -52,7 +52,7 @@ impl Parser {
                 };
                 self.definitions.insert(fqn, placeholder);
                 self.processing_queue
-                    .push((schema.clone(), namespace.clone().unwrap_or_default()));
+                    .push_back((schema.clone(), namespace.clone().unwrap_or_default()));
             }
 
             // Recursively discover in complex types
@@ -85,10 +85,38 @@ impl Parser {
     ///
     /// A `Result` containing a `Vec<SchemaIr>` of the parsed schemas, or a `ParserError` if parsing fails.
     pub fn parse(mut self) -> Result<Vec<SchemaIr>, ParserError> {
-        // loop over queue until empty
-        while let Some((schema, namespace)) = self.processing_queue.pop() {
-            self.parse_and_define_schema(&schema, &namespace)?;
+        loop {
+            let mut processed_in_this_pass = false;
+            let current_pass_queue_size = self.processing_queue.len();
+
+            // Process all schemas that were in the queue at the start of this pass
+            for _ in 0..current_pass_queue_size {
+                if let Some((schema, namespace)) = self.processing_queue.pop_front() {
+                    match self.parse_and_define_schema(&schema, &namespace) {
+                        Ok(_) => {
+                            processed_in_this_pass = true;
+                        }
+                        Err(ParserError::DependencyNotResolved(_)) => {
+                            // Re-add to the back of the queue if a dependency is not yet resolved
+                            self.processing_queue.push_back((schema, namespace));
+                        }
+                        Err(e) => return Err(e), // Propagate other errors immediately
+                    }
+                }
+            }
+
+            // If the queue is empty, we're done.
+            if self.processing_queue.is_empty() {
+                break;
+            }
+
+            // If no schemas were processed in this entire pass, and the queue is not empty,
+            // it means we have unresolvable dependencies or a circular dependency.
+            if !processed_in_this_pass {
+                return Err(ParserError::CircularDependencyDetected);
+            }
         }
+
         // sort the result deterministically by the fqn
         let mut result: Vec<SchemaIr> = self.definitions.into_values().collect();
         result.sort_by_key(|ir| ir.fqn().to_string());
@@ -439,7 +467,7 @@ impl Parser {
 
             TypeIr::Map(inner_type) => match json_val {
                 JsonValue::Object(obj) => {
-                    let values: Result<std::collections::HashMap<String, ValueIr>, ParserError> =
+                    let values: Result<std::collections::BTreeMap<String, ValueIr>, ParserError> =
                         obj.iter()
                             .map(|(k, v)| {
                                 Ok((k.clone(), self.resolve_default_value(v, inner_type)?))
@@ -463,24 +491,34 @@ impl Parser {
 
             TypeIr::Record(fqn) => match json_val {
                 JsonValue::Object(obj) => {
-                    let mut record_defaults = HashMap::new();
+                    let mut record_defaults = BTreeMap::new();
                     // Look up the record definition to know its fields
-                    let record_ir = self
+                    let record_schema_ir = self
                         .definitions
                         .get(fqn)
                         .ok_or_else(|| ParserError::UnknownSchemaReference(fqn.clone()))?;
-                    if let SchemaIr::Record(NamedType {
+
+                    let record_details = if let SchemaIr::Record(NamedType {
                         inner: record_details,
                         ..
-                    }) = record_ir
+                    }) = record_schema_ir
                     {
-                        for field in &record_details.fields {
-                            if let Some(field_json_val) = obj.get(&field.name) {
-                                record_defaults.insert(
-                                    field.name.clone(),
-                                    self.resolve_default_value(field_json_val, &field.ty)?,
-                                );
-                            }
+                        record_details
+                    } else if let SchemaIr::Placeholder { .. } = record_schema_ir {
+                        return Err(ParserError::DependencyNotResolved(fqn.clone()));
+                    } else {
+                        return Err(ParserError::InvalidDefaultValue {
+                            expected: format!("RecordIR for {}", fqn),
+                            found: format!("{:?}", record_schema_ir),
+                        });
+                    };
+
+                    for field in &record_details.fields {
+                        if let Some(field_json_val) = obj.get(&field.name) {
+                            record_defaults.insert(
+                                field.name.clone(),
+                                self.resolve_default_value(field_json_val, &field.ty)?,
+                            );
                         }
                     }
                     Ok(ValueIr::Record(record_defaults))
@@ -503,13 +541,9 @@ impl Parser {
                 self.resolve_default_value(json_val, first_variant_type)
             }
 
-            // The default for an option can only be null.
-            TypeIr::Option(_) => match json_val {
+            TypeIr::Option(inner_type) => match json_val {
                 JsonValue::Null => Ok(ValueIr::Null),
-                _ => Err(ParserError::InvalidDefaultValue {
-                    expected: "null for Option type".to_string(),
-                    found: format!("{:?}", json_val),
-                }),
+                _ => self.resolve_default_value(json_val, inner_type),
             },
         }
     }

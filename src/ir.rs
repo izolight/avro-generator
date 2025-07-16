@@ -141,8 +141,8 @@ pub enum ValueIr {
     Decimal(num_bigint::BigInt),
     BigDecimal(String), // String representation of big decimal
     Array(Vec<ValueIr>),
-    Map(std::collections::HashMap<String, ValueIr>),
+    Map(std::collections::BTreeMap<String, ValueIr>),
     Enum(String),
     Fixed(Vec<u8>),
-    Record(std::collections::HashMap<String, ValueIr>),
+    Record(std::collections::BTreeMap<String, ValueIr>),
 }

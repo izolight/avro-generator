@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let definitions = parser.definitions.clone();
     let ir_schemas = parser.parse()?;
 
-    let mut generator = CodeGenerator::new(definitions);
+    let mut generator = CodeGenerator::new(definitions.into());
     let generated_code = generator.generate_all_schemas(&ir_schemas)?;
 
     // For now, print to stdout. In a real scenario, write to files in the output directory.
