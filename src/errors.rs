@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Errors that can occur during code generation.
 #[derive(Error, Debug)]
 pub enum GeneratorError {
     #[error("Placeholder schema found during code generation: {0}")]
@@ -22,6 +23,7 @@ pub enum GeneratorError {
     BigDecimalParseError(#[from] bigdecimal::ParseBigDecimalError),
 }
 
+/// Errors that can occur during schema parsing.
 #[derive(Error, Debug)]
 pub enum ParserError {
     #[error("Invalid default value for type '{expected}': {found}")]

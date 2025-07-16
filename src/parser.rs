@@ -9,6 +9,7 @@ use crate::ir::{
     ValueIr,
 };
 
+/// Parses Avro schemas into the Intermediate Representation (IR).
 pub struct Parser {
     // stores definition of all named types with fully qualified names
     pub definitions: HashMap<String, SchemaIr>,
@@ -17,6 +18,11 @@ pub struct Parser {
 }
 
 impl Parser {
+    /// Creates a new `Parser` instance and discovers all named schemas within the provided raw schemas.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_schemas` - A slice of `apache_avro::Schema` to parse.
     pub fn new(raw_schemas: &[Schema]) -> Self {
         let mut parser = Self {
             definitions: HashMap::new(),
@@ -71,6 +77,13 @@ impl Parser {
         }
     }
 
+    /// Parses the discovered schemas into their Intermediate Representation (IR).
+    ///
+    /// This method consumes the `Parser` instance.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec<SchemaIr>` of the parsed schemas, or a `ParserError` if parsing fails.
     pub fn parse(mut self) -> Result<Vec<SchemaIr>, ParserError> {
         // loop over queue until empty
         while let Some((schema, namespace)) = self.processing_queue.pop() {
@@ -426,10 +439,12 @@ impl Parser {
 
             TypeIr::Map(inner_type) => match json_val {
                 JsonValue::Object(obj) => {
-                    let values: Result<std::collections::HashMap<String, ValueIr>, ParserError> = obj
-                        .iter()
-                        .map(|(k, v)| Ok((k.clone(), self.resolve_default_value(v, inner_type)?)))
-                        .collect();
+                    let values: Result<std::collections::HashMap<String, ValueIr>, ParserError> =
+                        obj.iter()
+                            .map(|(k, v)| {
+                                Ok((k.clone(), self.resolve_default_value(v, inner_type)?))
+                            })
+                            .collect();
                     Ok(ValueIr::Map(values?))
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
@@ -500,6 +515,16 @@ impl Parser {
     }
 }
 
+/// Parses a decimal string into an unscaled BigInt, considering the given scale.
+///
+/// # Arguments
+///
+/// * `s` - The string representation of the decimal number.
+/// * `scale` - The scale of the decimal number.
+///
+/// # Returns
+///
+/// A `Result` containing the `num_bigint::BigInt` or a `ParserError` if parsing fails or scale mismatches.
 fn parse_decimal_string_to_unscaled_bigint(
     s: &str,
     scale: usize,
@@ -532,7 +557,9 @@ fn test_default_value_for_array_off_strings() {
         ValueIr::String("b".to_string()),
         ValueIr::String("c".to_string()),
     ]);
-    let result_ir = parser.resolve_default_value(&json_input, &target_type).expect("Failed to resolve default value");
+    let result_ir = parser
+        .resolve_default_value(&json_input, &target_type)
+        .expect("Failed to resolve default value");
     assert_eq!(result_ir, expected_ir);
 }
 
@@ -568,7 +595,8 @@ fn test_parser_on_all_schemas() {
         .expect("Failed to parse Avro schema");
         let parser = Parser::new(&schemas);
         let schema_ir = parser.parse().expect("Failed to parse schema IR");
-        let ir_as_json = serde_json::to_string_pretty(&schema_ir).expect("Failed to serialize IR to JSON");
+        let ir_as_json =
+            serde_json::to_string_pretty(&schema_ir).expect("Failed to serialize IR to JSON");
         insta::assert_snapshot!(ir_as_json);
     })
 }

@@ -1,5 +1,8 @@
 use serde::Serialize;
 
+/// Intermediate Representation (IR) of an Avro schema.
+/// This enum represents the different types of Avro schemas
+/// that can be processed by the generator.
 #[derive(Debug, Serialize, Clone)]
 pub enum SchemaIr {
     Record(RecordIr),
@@ -24,6 +27,7 @@ impl SchemaIr {
     }
 }
 
+/// Represents the kind of an Avro schema.
 #[derive(Debug, Serialize, Clone)]
 pub enum SchemaKind {
     Record,
@@ -31,6 +35,7 @@ pub enum SchemaKind {
     Fixed,
 }
 
+/// A generic struct for named Avro types (records, enums, fixed).
 #[derive(Debug, Serialize, Clone)]
 pub struct NamedType<T> {
     pub name: String,
@@ -42,11 +47,13 @@ pub type RecordIr = NamedType<RecordDetails>;
 pub type EnumIr = NamedType<EnumDetails>;
 pub type FixedIr = NamedType<FixedDetails>;
 
+/// Details specific to an Avro Record schema.
 #[derive(Debug, Serialize, Clone)]
 pub struct RecordDetails {
     pub fields: Vec<FieldIr>,
 }
 
+/// Represents a field within an Avro Record.
 #[derive(Debug, Serialize, Clone)]
 pub struct FieldIr {
     pub name: String,
@@ -55,16 +62,19 @@ pub struct FieldIr {
     pub default: Option<ValueIr>,
 }
 
+/// Details specific to an Avro Enum schema.
 #[derive(Debug, Serialize, Clone)]
 pub struct EnumDetails {
     pub symbols: Vec<String>,
 }
 
+/// Details specific to an Avro Fixed schema.
 #[derive(Debug, Serialize, Clone)]
 pub struct FixedDetails {
     pub size: usize,
 }
 
+/// Intermediate Representation (IR) for Avro types.
 #[derive(Debug, Serialize, Clone)]
 pub enum TypeIr {
     // Primitives
@@ -104,6 +114,7 @@ pub enum TypeIr {
     Fixed(String),
 }
 
+/// Intermediate Representation (IR) for Avro values.
 #[derive(Debug, PartialEq, Serialize, Clone)]
 #[allow(dead_code)]
 pub enum ValueIr {

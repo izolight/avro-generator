@@ -12,6 +12,7 @@ use clap::Parser;
 use crate::generator::CodeGenerator;
 use crate::parser::Parser as AvroParser;
 
+/// Command-line arguments for the Avro code generator.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -24,6 +25,15 @@ struct Args {
     output: String,
 }
 
+/// Main function for the Avro code generator CLI.
+///
+/// Parses command-line arguments, reads Avro schema files, converts them into
+/// an Intermediate Representation (IR), generates Rust code from the IR,
+/// and prints the generated code to standard output.
+///
+/// # Returns
+///
+/// A `Result` indicating success or an error if any step fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -68,4 +78,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

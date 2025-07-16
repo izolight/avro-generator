@@ -7,6 +7,7 @@ use syn::{Ident, Type, parse_quote};
 use crate::errors::GeneratorError;
 use crate::ir::{EnumIr, FixedIr, NamedType, RecordIr, SchemaIr, TypeIr, ValueIr};
 
+/// Generates Rust code from an Avro Intermediate Representation (IR).
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
     current_schema_fqn: String,
@@ -14,6 +15,11 @@ pub struct CodeGenerator {
 }
 
 impl CodeGenerator {
+    /// Creates a new `CodeGenerator` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `definitions` - A HashMap containing the definitions of all named schemas.
     pub fn new(definitions: HashMap<String, SchemaIr>) -> Self {
         CodeGenerator {
             generated_union_enums: HashMap::new(),
@@ -64,6 +70,15 @@ impl CodeGenerator {
         Ok(root.to_token_stream())
     }
 
+    /// Converts a fully qualified Avro name to a Rust path (e.g., `com.example.MyRecord` to `com::example::MyRecord`).
+    ///
+    /// # Arguments
+    ///
+    /// * `fqn` - The fully qualified name of the Avro type.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `syn::Type` representing the Rust path, or a `GeneratorError` if the FQN is empty.
     fn avro_fqn_to_rust_path(&self, fqn: &str) -> Result<Type, GeneratorError> {
         let fqn_parts: Vec<&str> = fqn.split('.').collect();
         let current_schema_fqn_parts: Vec<&str> = self.current_schema_fqn.split('.').collect();
@@ -89,6 +104,15 @@ impl CodeGenerator {
         }
     }
 
+    /// Converts a fully qualified Avro name to a Rust `Ident` (e.g., `com.example.MyRecord` to `MyRecord`).
+    ///
+    /// # Arguments
+    ///
+    /// * `fqn` - The fully qualified name of the Avro type.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `syn::Ident` representing the Rust name, or a `GeneratorError` if the FQN is empty.
     fn avro_fqn_to_rust_name(&self, fqn: &str) -> Result<Ident, GeneratorError> {
         let parts: Vec<&str> = fqn.split('.').collect();
         parts.last().map(|s| format_ident!("{}", s)).ok_or_else(|| {
@@ -99,6 +123,15 @@ impl CodeGenerator {
         })
     }
 
+    /// Maps an `TypeIr` to its corresponding Rust `Type` and an optional `TokenStream` for generated union enums.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty_ir` - The `TypeIr` to map.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a tuple of `syn::Type` and `Option<TokenStream>`, or a `GeneratorError`.
     fn map_type_ir_to_rust_type(
         &mut self,
         ty_ir: &TypeIr,
@@ -150,7 +183,16 @@ impl CodeGenerator {
         }
     }
 
-    // Generates a Rust expression for a default value
+    /// Generates a Rust expression for a default value based on the `ValueIr` and target `TypeIr`.
+    ///
+    /// # Arguments
+    ///
+    /// * `value_ir` - The `ValueIr` representing the default value.
+    /// * `target_type` - The `TypeIr` of the field the default value is for.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `TokenStream` for the Rust expression, or a `GeneratorError`.
     fn generate_default_value_expr(
         &mut self,
         value_ir: &ValueIr,
@@ -318,8 +360,15 @@ impl CodeGenerator {
         }
     }
 
-    /// Helper to convert a fully qualified Avro name to a Rust struct/enum name.
-    /// e.g., "com.example.MyRecord" -> `MyRecord`
+    /// Generates Rust code for an Avro Record schema.
+    ///
+    /// # Arguments
+    ///
+    /// * `record_ir` - The `RecordIr` representing the Avro Record.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `TokenStream` for the generated Rust struct, or a `GeneratorError`.
     fn generate_record(&mut self, record_ir: &RecordIr) -> Result<TokenStream, GeneratorError> {
         let struct_name = self.avro_fqn_to_rust_name(&record_ir.name)?;
         let doc = &record_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
@@ -378,6 +427,15 @@ impl CodeGenerator {
         })
     }
 
+    /// Generates Rust code for an Avro Enum schema.
+    ///
+    /// # Arguments
+    ///
+    /// * `enum_ir` - The `EnumIr` representing the Avro Enum.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `TokenStream` for the generated Rust enum, or a `GeneratorError`.
     fn generate_enum(&self, enum_ir: &EnumIr) -> Result<TokenStream, GeneratorError> {
         let enum_name = self.avro_fqn_to_rust_name(&enum_ir.name)?;
         let doc = &enum_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
@@ -395,6 +453,15 @@ impl CodeGenerator {
         })
     }
 
+    /// Generates Rust code for an Avro Fixed schema.
+    ///
+    /// # Arguments
+    ///
+    /// * `fixed_ir` - The `FixedIr` representing the Avro Fixed type.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `TokenStream` for the generated Rust type alias, or a `GeneratorError`.
     fn generate_fixed(&self, fixed_ir: &FixedIr) -> Result<TokenStream, GeneratorError> {
         let type_name = self.avro_fqn_to_rust_name(&fixed_ir.name)?;
         let doc = &fixed_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
@@ -406,6 +473,15 @@ impl CodeGenerator {
         })
     }
 
+    /// Determines the Rust `Ident` for a union variant based on its `TypeIr`.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty_ir` - The `TypeIr` of the union variant.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `syn::Ident` for the variant, or a `GeneratorError`.
     fn get_union_variant_name(&self, ty_ir: &TypeIr) -> Result<Ident, GeneratorError> {
         match ty_ir {
             TypeIr::String => Ok(format_ident!("String")),
@@ -439,6 +515,15 @@ impl CodeGenerator {
         }
     }
 
+    /// Determines the appropriate Serde visitor method for a given `TypeIr`.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty_ir` - The `TypeIr` to determine the visitor method for.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<Ident>` containing the `Ident` of the Serde visitor method, or `None` if not applicable.
     fn get_serde_visitor_method(&self, ty_ir: &TypeIr) -> Option<Ident> {
         match ty_ir {
             TypeIr::Boolean => Some(format_ident!("visit_bool")),
@@ -605,6 +690,7 @@ impl CodeGenerator {
     }
 }
 
+/// Represents a node in the module tree for organizing generated Rust code.
 #[derive(Default)]
 struct ModuleNode {
     name: Option<String>,
@@ -613,6 +699,11 @@ struct ModuleNode {
 }
 
 impl ModuleNode {
+    /// Creates a new `ModuleNode`.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the module (None for the root node).
     fn new(name: Option<String>) -> Self {
         Self {
             name,
@@ -621,6 +712,17 @@ impl ModuleNode {
         }
     }
 
+    /// Adds a schema to the module tree, creating submodules as needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `namespace_parts` - The parts of the namespace for the schema.
+    /// * `schema_ir` - The `SchemaIr` to add.
+    /// * `generator` - A mutable reference to the `CodeGenerator`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or a `GeneratorError`.
     fn add_schema(
         &mut self,
         namespace_parts: &[&str],
@@ -639,6 +741,11 @@ impl ModuleNode {
         Ok(())
     }
 
+    /// Converts the `ModuleNode` and its children into a `TokenStream` representing the Rust module structure.
+    ///
+    /// # Returns
+    ///
+    /// A `TokenStream` of the generated Rust modules and code.
     fn to_token_stream(&self) -> TokenStream {
         let submodules_tokens = self
             .submodules
@@ -971,7 +1078,9 @@ mod tests {
             let schema_ir = parser.parse().expect("Failed to parse schema IR in test");
 
             let mut generator = CodeGenerator::new(definitions);
-            let generated_code = generator.generate_all_schemas(&schema_ir).expect("Failed to generate all schemas in test");
+            let generated_code = generator
+                .generate_all_schemas(&schema_ir)
+                .expect("Failed to generate all schemas in test");
             let res = syn::parse2::<File>(generated_code.clone());
             if let Err(e) = res {
                 eprintln!(
@@ -981,7 +1090,8 @@ mod tests {
                 );
                 panic!("Syn error: {}", e);
             }
-            let formatted_code = prettyplease::unparse(&res.expect("Failed to unparse generated code"));
+            let formatted_code =
+                prettyplease::unparse(&res.expect("Failed to unparse generated code"));
 
             insta::assert_snapshot!(formatted_code);
         })
