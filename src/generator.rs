@@ -406,6 +406,52 @@ impl CodeGenerator {
         })
     }
 
+    fn get_union_variant_name(&self, ty_ir: &TypeIr) -> Result<Ident, GeneratorError> {
+        match ty_ir {
+            TypeIr::String => Ok(format_ident!("String")),
+            TypeIr::Long => Ok(format_ident!("Long")),
+            TypeIr::Int => Ok(format_ident!("Int")),
+            TypeIr::Boolean => Ok(format_ident!("Boolean")),
+            TypeIr::Float => Ok(format_ident!("Float")),
+            TypeIr::Double => Ok(format_ident!("Double")),
+            TypeIr::Bytes => Ok(format_ident!("Bytes")),
+            TypeIr::Null => Ok(format_ident!("Null")),
+            TypeIr::Date => Ok(format_ident!("Date")),
+            TypeIr::TimeMillis => Ok(format_ident!("TimeMillis")),
+            TypeIr::TimeMicros => Ok(format_ident!("TimeMicros")),
+            TypeIr::TimestampMillis => Ok(format_ident!("TimestampMillis")),
+            TypeIr::TimestampMicros => Ok(format_ident!("TimestampMicros")),
+            TypeIr::TimestampNanos => Ok(format_ident!("TimestampNanos")),
+            TypeIr::LocalTimestampMillis => Ok(format_ident!("LocalTimestampMillis")),
+            TypeIr::LocalTimestampMicros => Ok(format_ident!("LocalTimestampMicros")),
+            TypeIr::LocalTimestampNanos => Ok(format_ident!("LocalTimestampNanos")),
+            TypeIr::Duration => Ok(format_ident!("Duration")),
+            TypeIr::Uuid => Ok(format_ident!("Uuid")),
+            TypeIr::Decimal { .. } => Ok(format_ident!("Decimal")),
+            TypeIr::BigDecimal => Ok(format_ident!("BigDecimal")),
+            TypeIr::Array(_) => Ok(format_ident!("Array")),
+            TypeIr::Map(_) => Ok(format_ident!("Map")),
+            TypeIr::Option(_) => Ok(format_ident!("Option")),
+            TypeIr::Union(_) => Ok(format_ident!("NestedUnion")),
+            TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn),
+            TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn),
+            TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn),
+        }
+    }
+
+    fn get_serde_visitor_method(&self, ty_ir: &TypeIr) -> Option<Ident> {
+        match ty_ir {
+            TypeIr::Boolean => Some(format_ident!("visit_bool")),
+            TypeIr::Int => Some(format_ident!("visit_i32")),
+            TypeIr::Long => Some(format_ident!("visit_i64")),
+            TypeIr::Float => Some(format_ident!("visit_f32")),
+            TypeIr::Double => Some(format_ident!("visit_f64")),
+            TypeIr::String => Some(format_ident!("visit_str")),
+            TypeIr::Bytes => Some(format_ident!("visit_bytes")),
+            _ => None,
+        }
+    }
+
     /// Generate a rust enum for a complex avro union
     fn generate_union_enum(
         &mut self,
@@ -433,47 +479,9 @@ impl CodeGenerator {
         let mut variants_data = Vec::new();
         for (index, ty_ir) in union_ir_variants.iter().enumerate() {
             let (rust_type, _) = self.map_type_ir_to_rust_type(ty_ir)?;
-            let variant_ident = match ty_ir {
-                TypeIr::String => format_ident!("String"),
-                TypeIr::Long => format_ident!("Long"),
-                TypeIr::Int => format_ident!("Int"),
-                TypeIr::Boolean => format_ident!("Boolean"),
-                TypeIr::Float => format_ident!("Float"),
-                TypeIr::Double => format_ident!("Double"),
-                TypeIr::Bytes => format_ident!("Bytes"),
-                TypeIr::Null => format_ident!("Null"), // Should not be in complex unions, but for completeness
-                TypeIr::Date => format_ident!("Date"),
-                TypeIr::TimeMillis => format_ident!("TimeMillis"),
-                TypeIr::TimeMicros => format_ident!("TimeMicros"),
-                TypeIr::TimestampMillis => format_ident!("TimestampMillis"),
-                TypeIr::TimestampMicros => format_ident!("TimestampMicros"),
-                TypeIr::TimestampNanos => format_ident!("TimestampNanos"),
-                TypeIr::LocalTimestampMillis => format_ident!("LocalTimestampMillis"),
-                TypeIr::LocalTimestampMicros => format_ident!("LocalTimestampMicros"),
-                TypeIr::LocalTimestampNanos => format_ident!("LocalTimestampNanos"),
-                TypeIr::Duration => format_ident!("Duration"),
-                TypeIr::Uuid => format_ident!("Uuid"),
-                TypeIr::Decimal { .. } => format_ident!("Decimal"),
-                TypeIr::BigDecimal => format_ident!("BigDecimal"),
-                TypeIr::Array(_) => format_ident!("Array"), // Could be more specific, e.g., ArrayString
-                TypeIr::Map(_) => format_ident!("Map"),     // Could be more specific
-                TypeIr::Option(_) => format_ident!("Option"), // Should not be in complex unions
-                TypeIr::Union(_) => format_ident!("NestedUnion"), // Should not be in complex unions
-                TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn)?,
-                TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn)?,
-                TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn)?,
-            };
+            let variant_ident = self.get_union_variant_name(ty_ir)?;
 
-            let serde_vistor_method = match ty_ir {
-                TypeIr::Boolean => Some(format_ident!("visit_bool")),
-                TypeIr::Int => Some(format_ident!("visit_i32")),
-                TypeIr::Long => Some(format_ident!("visit_i64")),
-                TypeIr::Float => Some(format_ident!("visit_f32")),
-                TypeIr::Double => Some(format_ident!("visit_f64")),
-                TypeIr::String => Some(format_ident!("visit_str")),
-                TypeIr::Bytes => Some(format_ident!("visit_bytes")),
-                _ => None,
-            };
+            let serde_vistor_method = self.get_serde_visitor_method(ty_ir);
             variants_data.push((index as u32, variant_ident, rust_type, serde_vistor_method));
         }
         let enum_variants = variants_data
@@ -960,10 +968,10 @@ mod tests {
 
             let parser = Parser::new(&schemas);
             let definitions = parser.definitions.clone();
-            let schema_ir = parser.parse().unwrap();
+            let schema_ir = parser.parse().expect("Failed to parse schema IR in test");
 
             let mut generator = CodeGenerator::new(definitions);
-            let generated_code = generator.generate_all_schemas(&schema_ir).unwrap();
+            let generated_code = generator.generate_all_schemas(&schema_ir).expect("Failed to generate all schemas in test");
             let res = syn::parse2::<File>(generated_code.clone());
             if let Err(e) = res {
                 eprintln!(
@@ -973,7 +981,7 @@ mod tests {
                 );
                 panic!("Syn error: {}", e);
             }
-            let formatted_code = prettyplease::unparse(&res.unwrap());
+            let formatted_code = prettyplease::unparse(&res.expect("Failed to unparse generated code"));
 
             insta::assert_snapshot!(formatted_code);
         })
