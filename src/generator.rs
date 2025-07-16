@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -48,58 +48,30 @@ impl CodeGenerator {
         &mut self,
         schemas: &[SchemaIr],
     ) -> Result<TokenStream, GeneratorError> {
-        let mut all_code = TokenStream::new();
-        // Group schemas by namespace to create modules
-        let mut namespaces: std::collections::BTreeMap<String, Vec<&SchemaIr>> =
-            std::collections::BTreeMap::new();
+        let mut root = ModuleNode::new(None);
+        let mut errors = vec![];
+
         for schema_ir in schemas {
             let fqn = schema_ir.fqn();
             let parts: Vec<&str> = fqn.split('.').collect();
-            let (namespace, _name) = if parts.len() > 1 {
-                (parts[0..parts.len() - 1].join("."), parts.last().unwrap())
+
+            if parts.len() > 1 {
+                let (namespace_parts, _name) = parts.split_at(parts.len() - 1);
+                root.add_schema(namespace_parts, schema_ir, self)?;
             } else {
-                ("".to_string(), parts.last().unwrap())
-            };
-            namespaces
-                .entry(namespace)
-                .or_insert_with(Vec::new)
-                .push(schema_ir);
+                // It's in the global namespace
+                let code = self.generate_schema(schema_ir).map_err(|e| errors.push(e));
+                if let Some(c) = code.ok() {
+                    root.code.extend(c);
+                }
+            }
         }
 
-        for (namespace, schemas_in_ns) in namespaces {
-            let namespace_tokens = if namespace.is_empty() {
-                let inner_code = schemas_in_ns
-                    .iter()
-                    .map(|s| self.generate_schema(s))
-                    .collect::<Result<Vec<_>, _>>()?;
-                quote! { #(#inner_code)* }
-            } else {
-                // create nested modules for namespaces
-                let mut errors = vec![];
-                let schemas_code: TokenStream = schemas_in_ns
-                    .iter()
-                    .map(|s| self.generate_schema(s))
-                    .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
-                    .collect();
-                if !errors.is_empty() {
-                    return Err(GeneratorError::MultipleError(errors));
-                }
-
-                let mut namespace_tokens = schemas_code;
-                for part in namespace.split('.').rev() {
-                    let module_name = format_ident!("{}", part);
-                    namespace_tokens = quote! {
-                        pub mod #module_name {
-                            #namespace_tokens
-                        }
-                    };
-                }
-                namespace_tokens
-            };
-            all_code.extend(namespace_tokens);
+        if !errors.is_empty() {
+            return Err(GeneratorError::MultipleError(errors));
         }
 
-        Ok(all_code)
+        Ok(root.to_token_stream())
     }
 
     fn avro_fqn_to_rust_path(&self, fqn: &str) -> Type {
@@ -577,6 +549,66 @@ impl CodeGenerator {
         self.generated_union_enums
             .insert(union_enum_name_str, enum_definition.clone());
         Ok((union_enum_name, enum_definition))
+    }
+}
+
+#[derive(Default)]
+struct ModuleNode {
+    name: Option<String>,
+    submodules: BTreeMap<String, ModuleNode>,
+    code: TokenStream,
+}
+
+impl ModuleNode {
+    fn new(name: Option<String>) -> Self {
+        Self {
+            name,
+            submodules: BTreeMap::new(),
+            code: TokenStream::new(),
+        }
+    }
+
+    fn add_schema(
+        &mut self,
+        namespace_parts: &[&str],
+        schema_ir: &SchemaIr,
+        generator: &mut CodeGenerator,
+    ) -> Result<(), GeneratorError> {
+        if let Some((first, rest)) = namespace_parts.split_first() {
+            self.submodules
+                .entry(first.to_string())
+                .or_insert_with(|| ModuleNode::new(Some(first.to_string())))
+                .add_schema(rest, schema_ir, generator)?;
+        } else {
+            let schema_code = generator.generate_schema(schema_ir)?;
+            self.code.extend(schema_code);
+        }
+        Ok(())
+    }
+
+    fn to_token_stream(&self) -> TokenStream {
+        let submodules_tokens = self
+            .submodules
+            .values()
+            .map(|submodule| submodule.to_token_stream());
+
+        let code = &self.code;
+
+        if let Some(name) = &self.name {
+            let ident = format_ident!("{}", name);
+            quote! {
+                pub mod #ident {
+                    #(#submodules_tokens)*
+                    #code
+                }
+            }
+        } else {
+            // Root node
+            quote! {
+                #(#submodules_tokens)*
+                #code
+            }
+        }
     }
 }
 
