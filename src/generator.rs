@@ -19,7 +19,7 @@ impl CodeGenerator {
     ///
     /// # Arguments
     ///
-    /// * `definitions` - A HashMap containing the definitions of all named schemas.
+    /// * `definitions` - A `BTreeMap` containing the definitions of all named schemas.
     pub fn new(definitions: BTreeMap<String, SchemaIr>) -> Self {
         CodeGenerator {
             generated_union_enums: HashMap::new(),
@@ -28,7 +28,7 @@ impl CodeGenerator {
         }
     }
 
-    /// Generates a TokenStream for a single SchemaIr
+    /// Generates a `TokenStream` for a single `SchemaIr`
     pub fn generate_schema(&mut self, schema_ir: &SchemaIr) -> Result<TokenStream, GeneratorError> {
         self.current_schema_fqn = schema_ir.fqn().to_string();
         match schema_ir {
@@ -39,7 +39,7 @@ impl CodeGenerator {
         }
     }
 
-    /// Generates a TokenStream for all schemas, typically wrapped in modules
+    /// Generates a `TokenStream` for all schemas, typically wrapped in modules
     pub fn generate_all_schemas(&mut self) -> Result<TokenStream, GeneratorError> {
         let schemas: Vec<_> = self.definitions.values().cloned().collect();
         let mut root = ModuleNode::new(None);
@@ -121,9 +121,9 @@ impl CodeGenerator {
             })?;
 
         let escaped_name = if is_rust_keyword(name) {
-            format!("{}_", name)
+            format!("{name}_")
         } else {
-            name.to_string()
+            (*name).to_string()
         };
 
         Ok(format_ident!("{}", escaped_name))
@@ -157,9 +157,9 @@ impl CodeGenerator {
             TypeIr::Map(inner) => format!("MapOf{}", self.type_ir_to_short_name(inner)),
             TypeIr::Option(inner) => format!("OptionOf{}", self.type_ir_to_short_name(inner)),
             TypeIr::Union(_) => "Union".to_string(), // Should not happen for inner unions
-            TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
-            TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
-            TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
+            TypeIr::Record(fqn) | TypeIr::Enum(fqn) | TypeIr::Fixed(fqn) => {
+                self.avro_fqn_to_rust_name(fqn).unwrap().to_string()
+            }
         }
     }
 
@@ -186,14 +186,15 @@ impl CodeGenerator {
             TypeIr::Bytes => Ok((parse_quote! { Vec<u8> }, None)),
             TypeIr::String => Ok((parse_quote! { String }, None)),
             TypeIr::Date => Ok((parse_quote! { chrono::NaiveDate }, None)),
-            TypeIr::TimeMillis => Ok((parse_quote! { chrono::Duration }, None)),
-            TypeIr::TimeMicros => Ok((parse_quote! { chrono::Duration }, None)),
-            TypeIr::TimestampMillis => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
-            TypeIr::TimestampMicros => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
-            TypeIr::TimestampNanos => Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None)),
-            TypeIr::LocalTimestampMillis => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
-            TypeIr::LocalTimestampMicros => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
-            TypeIr::LocalTimestampNanos => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
+            TypeIr::TimeMillis | TypeIr::TimeMicros => {
+                Ok((parse_quote! { chrono::Duration }, None))
+            }
+            TypeIr::TimestampMillis | TypeIr::TimestampMicros | TypeIr::TimestampNanos => {
+                Ok((parse_quote! { chrono::DateTime<chrono::Utc> }, None))
+            }
+            TypeIr::LocalTimestampMillis
+            | TypeIr::LocalTimestampMicros
+            | TypeIr::LocalTimestampNanos => Ok((parse_quote! { chrono::NaiveDateTime }, None)),
             TypeIr::Duration => Ok((parse_quote! { apache_avro::Duration }, None)),
             TypeIr::Uuid => Ok((parse_quote! { uuid::Uuid }, None)),
             TypeIr::Decimal { .. } => Ok((parse_quote! { rust_decimal::Decimal }, None)),
@@ -288,12 +289,10 @@ impl CodeGenerator {
             }
             ValueIr::BigDecimal(s) => Ok(quote! { bigdecimal::BigDecimal::from_str(#s)? }),
             ValueIr::Array(arr) => {
-                let inner_type = if let TypeIr::Array(inner) = target_type {
-                    inner
-                } else {
+                let TypeIr::Array(inner_type) = target_type else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Array".to_string(),
-                        found: format!("{:?}", target_type),
+                        found: format!("{target_type:?}"),
                     });
                 };
                 let elements = arr
@@ -303,12 +302,10 @@ impl CodeGenerator {
                 Ok(quote! { vec![#(#elements),*] })
             }
             ValueIr::Map(map) => {
-                let inner_type = if let TypeIr::Map(inner) = target_type {
-                    inner
-                } else {
+                let TypeIr::Map(inner_type) = target_type else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Map".to_string(),
-                        found: format!("{:?}", target_type),
+                        found: format!("{target_type:?}"),
                     });
                 };
                 let entries = map
@@ -334,7 +331,7 @@ impl CodeGenerator {
                 } else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Enum".to_string(),
-                        found: format!("{:?}", target_type),
+                        found: format!("{target_type:?}"),
                     });
                 };
                 let variant_name = format_ident!("{}", s);
@@ -347,29 +344,29 @@ impl CodeGenerator {
                 } else {
                     return Err(GeneratorError::MismatchedDefaultType {
                         expected: "Record".to_string(),
-                        found: format!("{:?}", target_type),
+                        found: format!("{target_type:?}"),
                     });
                 };
 
-                let record_fqn = if let TypeIr::Record(fqn) = target_type {
-                    fqn
-                } else {
+                let TypeIr::Record(record_fqn) = target_type else {
                     unreachable!("This should be a record type based on the outer match");
                 };
 
                 let record_ir = self.definitions.get(record_fqn).ok_or_else(|| {
                     GeneratorError::MismatchedDefaultType {
-                        expected: format!("Record definition for {}", record_fqn),
+                        expected: format!("Record definition for {record_fqn}"),
                         found: "not found".to_string(),
                     }
                 })?;
 
-                let record_details = if let SchemaIr::Record(NamedType { inner, .. }) = record_ir {
-                    inner
-                } else {
+                let SchemaIr::Record(NamedType {
+                    inner: record_details,
+                    ..
+                }) = record_ir
+                else {
                     return Err(GeneratorError::MismatchedDefaultType {
-                        expected: format!("RecordIR for {}", record_fqn),
-                        found: format!("{:?}", record_ir),
+                        expected: format!("RecordIR for {record_fqn}"),
+                        found: format!("{record_ir:?}"),
                     });
                 };
 
@@ -384,7 +381,7 @@ impl CodeGenerator {
                     .map(|(k, v)| {
                         let field_type = field_types.get(k).ok_or_else(|| {
                             GeneratorError::MismatchedDefaultType {
-                                expected: format!("Field type for {}", k),
+                                expected: format!("Field type for {k}"),
                                 found: "not found in record definition".to_string(),
                             }
                         })?;
@@ -554,9 +551,9 @@ impl CodeGenerator {
             TypeIr::Map(_) => Ok(format_ident!("Map")),
             TypeIr::Option(_) => Ok(format_ident!("Option")),
             TypeIr::Union(_) => Ok(format_ident!("NestedUnion")),
-            TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn),
-            TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn),
-            TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn),
+            TypeIr::Record(fqn) | TypeIr::Enum(fqn) | TypeIr::Fixed(fqn) => {
+                self.avro_fqn_to_rust_name(fqn)
+            }
         }
     }
 
@@ -607,6 +604,7 @@ impl CodeGenerator {
             let variant_ident = self.get_union_variant_name(ty_ir)?;
 
             let serde_vistor_method = self.get_serde_visitor_method(ty_ir);
+            #[allow(clippy::cast_possible_truncation)]
             variants_data.push((index as u32, variant_ident, rust_type, serde_vistor_method));
         }
         let enum_variants = variants_data
@@ -771,8 +769,8 @@ impl ModuleNode {
     ) -> Result<(), GeneratorError> {
         if let Some((first, rest)) = namespace_parts.split_first() {
             self.submodules
-                .entry(first.to_string())
-                .or_insert_with(|| ModuleNode::new(Some(first.to_string())))
+                .entry((*first).to_string())
+                .or_insert_with(|| ModuleNode::new(Some((*first).to_string())))
                 .add_schema(rest, schema_ir, generator)?;
         } else {
             let schema_code = generator.generate_schema(schema_ir)?;
@@ -787,10 +785,7 @@ impl ModuleNode {
     ///
     /// A `TokenStream` of the generated Rust modules and code.
     fn to_token_stream(&self) -> TokenStream {
-        let submodules_tokens = self
-            .submodules
-            .values()
-            .map(|submodule| submodule.to_token_stream());
+        let submodules_tokens = self.submodules.values().map(ModuleNode::to_token_stream);
 
         let code = &self.code;
 
@@ -1053,11 +1048,8 @@ mod tests {
             }
         };
         assert_eq!(
-            map_expr.to_string().replace(" ", "").replace("\n", ""),
-            expected_map_expr
-                .to_string()
-                .replace(" ", "")
-                .replace("\n", "")
+            map_expr.to_string().replace([' ', '\n'], ""),
+            expected_map_expr.to_string().replace([' ', '\n'], "")
         );
     }
 
@@ -1159,8 +1151,11 @@ mod tests {
                 serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
             let schemas = match json_value {
                 serde_json::Value::Array(arr) => {
-                    let schema_strs: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
-                    apache_avro::Schema::parse_list(schema_strs.iter().map(|s| s.as_str()))
+                    let schema_strs: Vec<String> =
+                        arr.iter().map(std::string::ToString::to_string).collect();
+                    apache_avro::Schema::parse_list(
+                        schema_strs.iter().map(std::string::String::as_str),
+                    )
                 }
                 serde_json::Value::Object(_) => {
                     apache_avro::Schema::parse_str(&raw_schema_str).map(|s| vec![s])
@@ -1183,12 +1178,12 @@ mod tests {
                     path.display(),
                     generated_code
                 );
-                panic!("Syn error: {}", e);
+                panic!("Syn error: {e}");
             }
             let formatted_code =
                 prettyplease::unparse(&res.expect("Failed to unparse generated code"));
 
             insta::assert_snapshot!(formatted_code);
-        })
+        });
     }
 }

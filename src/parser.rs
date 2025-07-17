@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use apache_avro::Schema;
@@ -32,7 +33,8 @@ impl Parser {
         parser
     }
 
-    fn discover_schemas(&mut self, schemas: &[Schema], namespace: Option<String>) {
+    #[allow(clippy::needless_pass_by_value)]
+    fn discover_schemas(&mut self, schemas: &[Schema], namespace: apache_avro::schema::Namespace) {
         for schema in schemas {
             // For named types, create a placeholder and add to queue
             if let Some(name) = schema.name() {
@@ -112,8 +114,8 @@ impl Parser {
         }
         let final_ir = match schema {
             Schema::Record(r) => self.build_record_ir(r, context_namespace)?,
-            Schema::Enum(e) => self.build_enum_ir(e, context_namespace)?,
-            Schema::Fixed(f) => self.build_fixed_ir(f, context_namespace)?,
+            Schema::Enum(e) => self.build_enum_ir(e, context_namespace),
+            Schema::Fixed(f) => self.build_fixed_ir(f, context_namespace),
             _ => return Ok(()),
         };
         self.definitions.insert(fqn, final_ir);
@@ -154,8 +156,8 @@ impl Parser {
         &mut self,
         enum_schema: &apache_avro::schema::EnumSchema,
         context_namespace: &str,
-    ) -> Result<SchemaIr, ParserError> {
-        Ok(SchemaIr::Enum(NamedType {
+    ) -> SchemaIr {
+        SchemaIr::Enum(NamedType {
             name: enum_schema
                 .name
                 .fullname(Some(context_namespace.to_string())),
@@ -163,15 +165,15 @@ impl Parser {
             inner: EnumDetails {
                 symbols: enum_schema.symbols.clone(),
             },
-        }))
+        })
     }
 
     fn build_fixed_ir(
         &mut self,
         fixed_schema: &apache_avro::schema::FixedSchema,
         context_namespace: &str,
-    ) -> Result<SchemaIr, ParserError> {
-        Ok(SchemaIr::Fixed(NamedType {
+    ) -> SchemaIr {
+        SchemaIr::Fixed(NamedType {
             name: fixed_schema
                 .name
                 .fullname(Some(context_namespace.to_string())),
@@ -179,7 +181,7 @@ impl Parser {
             inner: FixedDetails {
                 size: fixed_schema.size,
             },
-        }))
+        })
     }
 
     // Converts raw Avro schemaa into `TypeIr`
@@ -288,7 +290,7 @@ impl Parser {
                 JsonValue::Null => Ok(ValueIr::Null),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Null".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -296,7 +298,7 @@ impl Parser {
                 JsonValue::Bool(b) => Ok(ValueIr::Boolean(*b)),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Boolean".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -305,12 +307,12 @@ impl Parser {
                     JsonValue::Number(n) => Ok(ValueIr::Int(n.as_i64().ok_or_else(|| {
                         ParserError::InvalidDefaultValue {
                             expected: "Int-compatible number".to_string(),
-                            found: format!("{:?}", n),
+                            found: format!("{n:?}"),
                         }
                     })? as i32)),
                     _ => Err(ParserError::InvalidDefaultValue {
                         expected: "Int-based type".to_string(),
-                        found: format!("{:?}", json_val),
+                        found: format!("{json_val:?}"),
                     }),
                 }
             }
@@ -326,12 +328,12 @@ impl Parser {
                 JsonValue::Number(n) => Ok(ValueIr::Long(n.as_i64().ok_or_else(|| {
                     ParserError::InvalidDefaultValue {
                         expected: "Long-compatible number".to_string(),
-                        found: format!("{:?}", n),
+                        found: format!("{n:?}"),
                     }
                 })?)),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Long-based type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -339,12 +341,12 @@ impl Parser {
                 JsonValue::Number(n) => Ok(ValueIr::Float(n.as_f64().ok_or_else(|| {
                     ParserError::InvalidDefaultValue {
                         expected: "Float-compatible number".to_string(),
-                        found: format!("{:?}", n),
+                        found: format!("{n:?}"),
                     }
                 })? as f32)),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Float".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -352,12 +354,12 @@ impl Parser {
                 JsonValue::Number(n) => Ok(ValueIr::Double(n.as_f64().ok_or_else(|| {
                     ParserError::InvalidDefaultValue {
                         expected: "Double-compatible number".to_string(),
-                        found: format!("{:?}", n),
+                        found: format!("{n:?}"),
                     }
                 })?)),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Double".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -365,7 +367,7 @@ impl Parser {
                 JsonValue::String(s) => Ok(ValueIr::String(s.clone())),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "String-based type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -385,7 +387,7 @@ impl Parser {
                             v.as_u64().map(|val| val as u8).ok_or_else(|| {
                                 ParserError::InvalidDefaultValue {
                                     expected: "Byte array elements to be numbers".to_string(),
-                                    found: format!("{:?}", v),
+                                    found: format!("{v:?}"),
                                 }
                             })
                         })
@@ -395,14 +397,14 @@ impl Parser {
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "string or byte array for Decimal".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
             TypeIr::Bytes | TypeIr::Fixed(_) => match json_val {
                 JsonValue::String(s) => Ok(ValueIr::Bytes(s.clone().into_bytes())),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Bytes/Fixed type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -416,7 +418,7 @@ impl Parser {
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Duration type (12-char string)".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -430,7 +432,7 @@ impl Parser {
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Array type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -446,7 +448,7 @@ impl Parser {
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Map type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -454,7 +456,7 @@ impl Parser {
                 JsonValue::String(s) => Ok(ValueIr::Enum(s.clone())),
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Enum type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -484,7 +486,7 @@ impl Parser {
                 }
                 _ => Err(ParserError::InvalidDefaultValue {
                     expected: "Record type".to_string(),
-                    found: format!("{:?}", json_val),
+                    found: format!("{json_val:?}"),
                 }),
             },
 
@@ -509,7 +511,7 @@ impl Parser {
     }
 }
 
-/// Parses a decimal string into an unscaled BigInt, considering the given scale.
+/// Parses a decimal string into an unscaled `BigInt`, considering the given scale.
 ///
 /// # Arguments
 ///
@@ -529,12 +531,14 @@ fn parse_decimal_string_to_unscaled_bigint(
     let mut unscaled_str = String::from(integer_part);
     unscaled_str.push_str(fractional_part);
     let current_factional_len = fractional_part.len();
-    if current_factional_len < scale {
-        for _ in 0..(scale - current_factional_len) {
-            unscaled_str.push('0');
+    match current_factional_len.cmp(&scale) {
+        Ordering::Less => {
+            unscaled_str.extend(std::iter::repeat_n('0', scale - current_factional_len));
         }
-    } else if current_factional_len > scale {
-        return Err(ParserError::DecimalScaleMismatch);
+        Ordering::Greater => {
+            return Err(ParserError::DecimalScaleMismatch);
+        }
+        Ordering::Equal => {}
     }
     num_bigint::BigInt::parse_bytes(unscaled_str.as_bytes(), 10)
         .ok_or_else(|| ParserError::BigIntParseError(s.to_string()))
@@ -578,8 +582,9 @@ fn test_parser_on_all_schemas() {
             serde_json::from_str(&raw_schema_str).expect("Failed to parse file as JSON");
         let schemas = match json_value {
             serde_json::Value::Array(arr) => {
-                let schema_strs: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
-                apache_avro::Schema::parse_list(schema_strs.iter().map(|s| s.as_str()))
+                let schema_strs: Vec<String> =
+                    arr.iter().map(std::string::ToString::to_string).collect();
+                apache_avro::Schema::parse_list(schema_strs.iter().map(std::string::String::as_str))
             }
             serde_json::Value::Object(_) => {
                 apache_avro::Schema::parse_str(&raw_schema_str).map(|s| vec![s])
@@ -592,5 +597,5 @@ fn test_parser_on_all_schemas() {
         let ir_as_json =
             serde_json::to_string_pretty(&schema_ir).expect("Failed to serialize IR to JSON");
         insta::assert_snapshot!(ir_as_json);
-    })
+    });
 }

@@ -19,3 +19,8 @@ thiserror = "2.0.12"
 uuid = "1.17.0"
 clap = { version = "4.0", features = ["derive"] }
 prettyplease = "0.2.0"
+
+[lints.clippy]
+too_many_lines = "allow"
+unused-self = "allow"
+pedantic = { level = "warn", priority = -1 }
