@@ -1,0 +1,17 @@
+[
+  {
+    "type": "record",
+    "name": "struct",
+    "namespace": "com.example",
+    "fields": [
+      {"name": "enum", "type": "long"},
+      {"name": "match", "type": "string"}
+    ]
+  },
+  {
+    "type": "enum",
+    "name": "enum",
+    "namespace": "com.example",
+    "symbols": ["fn", "type", "impl"]
+  }
+]

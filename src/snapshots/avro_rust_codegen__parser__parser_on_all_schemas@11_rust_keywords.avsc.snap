@@ -1,0 +1,42 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/11_rust_keywords.avsc
+---
+{
+  "com.example.enum": {
+    "Enum": {
+      "name": "com.example.enum",
+      "doc": null,
+      "inner": {
+        "symbols": [
+          "fn",
+          "type",
+          "impl"
+        ]
+      }
+    }
+  },
+  "com.example.struct": {
+    "Record": {
+      "name": "com.example.struct",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "enum",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "match",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+}

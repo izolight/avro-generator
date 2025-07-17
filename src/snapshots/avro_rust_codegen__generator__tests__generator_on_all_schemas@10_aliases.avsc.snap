@@ -1,0 +1,10 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/10_aliases.avsc
+---
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct User {
+    pub id: i64,
+    pub name: String,
+}

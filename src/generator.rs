@@ -113,12 +113,20 @@ impl CodeGenerator {
     /// A `Result` containing the `syn::Ident` representing the Rust name, or a `GeneratorError` if the FQN is empty.
     fn avro_fqn_to_rust_name(&self, fqn: &str) -> Result<Ident, GeneratorError> {
         let parts: Vec<&str> = fqn.split('.').collect();
-        parts.last().map(|s| format_ident!("{}", s)).ok_or_else(|| {
-            GeneratorError::MismatchedDefaultType {
+        let name = parts
+            .last()
+            .ok_or_else(|| GeneratorError::MismatchedDefaultType {
                 expected: "non-empty FQN".to_string(),
                 found: fqn.to_string(),
-            }
-        })
+            })?;
+
+        let escaped_name = if is_rust_keyword(name) {
+            format!("{}_", name)
+        } else {
+            name.to_string()
+        };
+
+        Ok(format_ident!("{}", escaped_name))
     }
 
     /// Generates a name for types that will be used when generating union types
@@ -409,8 +417,8 @@ impl CodeGenerator {
         let mut union_tokens = TokenStream::new();
 
         for field in &record_ir.inner.fields {
-            let field_name = format_ident!("{}", field.name);
-            let fn_name = format_ident!("default_{}", field.name);
+            let field_name = self.avro_fqn_to_rust_name(&field.name)?;
+            let fn_name = format_ident!("default_{}", field_name);
 
             let (field_type, generated_union) = self.map_type_ir_to_rust_type(&field.ty)?;
             if let Some(union_code) = generated_union {
@@ -471,8 +479,13 @@ impl CodeGenerator {
     fn generate_enum(&self, enum_ir: &EnumIr) -> Result<TokenStream, GeneratorError> {
         let enum_name = self.avro_fqn_to_rust_name(&enum_ir.name)?;
         let doc = &enum_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
-        let variants = enum_ir.inner.symbols.iter().map(|symbol| {
-            let variant_name = format_ident!("{}", symbol);
+        let variant_names: Vec<Ident> = enum_ir
+            .inner
+            .symbols
+            .iter()
+            .map(|symbol| self.avro_fqn_to_rust_name(symbol))
+            .collect::<Result<Vec<Ident>, GeneratorError>>()?;
+        let variants = variant_names.iter().map(|variant_name| {
             quote! { #variant_name }
         });
 
@@ -797,6 +810,62 @@ impl ModuleNode {
             }
         }
     }
+}
+
+fn is_rust_keyword(s: &str) -> bool {
+    matches!(
+        s,
+        "as" | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "Self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "async"
+            | "await"
+            | "dyn"
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "macro"
+            | "override"
+            | "priv"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+            | "try"
+    )
 }
 
 #[cfg(test)]

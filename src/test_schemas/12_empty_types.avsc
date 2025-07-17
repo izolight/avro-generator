@@ -1,0 +1,17 @@
+[
+  {
+    "type": "record",
+    "name": "EmptyRecord",
+    "fields": []
+  },
+  {
+    "type": "enum",
+    "name": "EmptyEnum",
+    "symbols": []
+  },
+  {
+    "type": "fixed",
+    "name": "ZeroFixed",
+    "size": 0
+  }
+]

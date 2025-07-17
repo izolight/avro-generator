@@ -1,0 +1,20 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/11_rust_keywords.avsc
+---
+pub mod com {
+    pub mod example {
+        #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+        pub enum enum_ {
+            fn_,
+            type_,
+            impl_,
+        }
+        #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct struct_ {
+            pub enum_: i64,
+            pub match_: String,
+        }
+    }
+}

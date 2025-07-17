@@ -1,0 +1,34 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/12_empty_types.avsc
+---
+{
+  "EmptyEnum": {
+    "Enum": {
+      "name": "EmptyEnum",
+      "doc": null,
+      "inner": {
+        "symbols": []
+      }
+    }
+  },
+  "EmptyRecord": {
+    "Record": {
+      "name": "EmptyRecord",
+      "doc": null,
+      "inner": {
+        "fields": []
+      }
+    }
+  },
+  "ZeroFixed": {
+    "Fixed": {
+      "name": "ZeroFixed",
+      "doc": null,
+      "inner": {
+        "size": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "User",
+  "aliases": ["OldUser", "LegacyUser"],
+  "fields": [
+    {"name": "id", "type": "long"},
+    {"name": "name", "type": "string"}
+  ]
+}

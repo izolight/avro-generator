@@ -1,0 +1,29 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/10_aliases.avsc
+---
+{
+  "User": {
+    "Record": {
+      "name": "User",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "id",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "name",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+}
