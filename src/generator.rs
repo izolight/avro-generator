@@ -548,8 +548,11 @@ impl CodeGenerator {
         let mut sorted_rust_types: Vec<String> = sorted_rust_types
             .iter()
             .map(|t| quote!(#t).to_string())
+            .map(|t| match t.as_str() {
+                "()" => "Null".to_string(),
+                _ => t,
+            })
             .collect();
-        // quote!(#rust_type).to_string()
         sorted_rust_types.sort();
 
         let union_enum_name_str = format!("Union{}", sorted_rust_types.join(""));
@@ -1067,7 +1070,7 @@ mod tests {
                 serde_json::Value::Object(_) => {
                     apache_avro::Schema::parse_str(&raw_schema_str).map(|s| vec![s])
                 }
-                _ => panic!("Schema file is not a vallid JSON objecct or array"),
+                _ => panic!("Schema file is not a valid JSON objecct or array"),
             }
             .expect("Failed to parse Avro schema");
 
