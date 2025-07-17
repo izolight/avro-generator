@@ -1,0 +1,100 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/08_complex_defaults.avsc
+---
+{
+  "com.example.ConfigWithDefaults": {
+    "Record": {
+      "name": "com.example.ConfigWithDefaults",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "activeFeatures",
+            "doc": null,
+            "ty": {
+              "Array": "String"
+            },
+            "default": {
+              "Array": [
+                {
+                  "String": "featureA"
+                },
+                {
+                  "String": "featureB"
+                }
+              ]
+            }
+          },
+          {
+            "name": "settingsMap",
+            "doc": null,
+            "ty": {
+              "Map": "Int"
+            },
+            "default": {
+              "Map": {
+                "retries": {
+                  "Int": 3
+                },
+                "timeout": {
+                  "Int": 1000
+                }
+              }
+            }
+          },
+          {
+            "name": "status",
+            "doc": null,
+            "ty": {
+              "Option": "String"
+            },
+            "default": {
+              "String": "active"
+            }
+          },
+          {
+            "name": "nestedRecordDefault",
+            "doc": null,
+            "ty": {
+              "Record": "com.example.NestedDefault"
+            },
+            "default": {
+              "Record": {
+                "description": {
+                  "String": "Default nested item"
+                },
+                "id": {
+                  "Long": 12345
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "com.example.NestedDefault": {
+    "Record": {
+      "name": "com.example.NestedDefault",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "id",
+            "doc": null,
+            "ty": "Long",
+            "default": null
+          },
+          {
+            "name": "description",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+}

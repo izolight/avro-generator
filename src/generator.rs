@@ -11,7 +11,7 @@ use crate::ir::{EnumIr, FixedIr, NamedType, RecordIr, SchemaIr, TypeIr, ValueIr}
 pub struct CodeGenerator {
     generated_union_enums: HashMap<String, TokenStream>,
     current_schema_fqn: String,
-    definitions: HashMap<String, SchemaIr>,
+    definitions: BTreeMap<String, SchemaIr>,
 }
 
 impl CodeGenerator {
@@ -20,7 +20,7 @@ impl CodeGenerator {
     /// # Arguments
     ///
     /// * `definitions` - A HashMap containing the definitions of all named schemas.
-    pub fn new(definitions: HashMap<String, SchemaIr>) -> Self {
+    pub fn new(definitions: BTreeMap<String, SchemaIr>) -> Self {
         CodeGenerator {
             generated_union_enums: HashMap::new(),
             current_schema_fqn: String::new(),
@@ -40,10 +40,8 @@ impl CodeGenerator {
     }
 
     /// Generates a TokenStream for all schemas, typically wrapped in modules
-    pub fn generate_all_schemas(
-        &mut self,
-        schemas: &[SchemaIr],
-    ) -> Result<TokenStream, GeneratorError> {
+    pub fn generate_all_schemas(&mut self) -> Result<TokenStream, GeneratorError> {
+        let schemas: Vec<_> = self.definitions.values().cloned().collect();
         let mut root = ModuleNode::new(None);
         let mut errors = vec![];
 
@@ -53,10 +51,10 @@ impl CodeGenerator {
 
             if parts.len() > 1 {
                 let (namespace_parts, _name) = parts.split_at(parts.len() - 1);
-                root.add_schema(namespace_parts, schema_ir, self)?;
+                root.add_schema(namespace_parts, &schema_ir, self)?;
             } else {
                 // It's in the global namespace
-                let code = self.generate_schema(schema_ir).map_err(|e| errors.push(e));
+                let code = self.generate_schema(&schema_ir).map_err(|e| errors.push(e));
                 if let Ok(c) = code {
                     root.code.extend(c);
                 }
@@ -785,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_avro_fqn_to_rust_path() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         generator.current_schema_fqn = "com.example.MyRecord".to_string();
         let fqn = "com.example.MyRecord";
         let expected: Type = parse_quote! { MyRecord };
@@ -807,7 +805,7 @@ mod tests {
     fn test_avro_fqn_to_rust_name() {
         let fqn = "com.example.MyRecord";
         let expected = format_ident!("MyRecord");
-        let actual = CodeGenerator::new(HashMap::new())
+        let actual = CodeGenerator::new(BTreeMap::new())
             .avro_fqn_to_rust_name(fqn)
             .expect("Failed to get Rust name from FQN");
         assert_eq!(actual, expected);
@@ -815,7 +813,7 @@ mod tests {
 
     #[test]
     fn test_map_type_ir_to_rust_type() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
 
         // Simple types
         let (t, _) = generator
@@ -904,7 +902,7 @@ mod tests {
 
     #[test]
     fn test_generate_default_value_expr() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
 
         // Simple values
         let null_expr = generator
@@ -967,7 +965,7 @@ mod tests {
 
     #[test]
     fn test_generate_record() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         let record_ir = RecordIr {
             name: "com.example.User".to_string(),
             doc: Some("A user record".to_string()),
@@ -1000,7 +998,7 @@ mod tests {
 
     #[test]
     fn test_generate_enum() {
-        let generator = CodeGenerator::new(HashMap::new());
+        let generator = CodeGenerator::new(BTreeMap::new());
         let enum_ir = EnumIr {
             name: "com.example.Suit".to_string(),
             doc: Some("Card suit".to_string()),
@@ -1025,7 +1023,7 @@ mod tests {
 
     #[test]
     fn test_generate_fixed() {
-        let generator = CodeGenerator::new(HashMap::new());
+        let generator = CodeGenerator::new(BTreeMap::new());
         let fixed_ir = FixedIr {
             name: "com.example.Md5".to_string(),
             doc: None,
@@ -1043,7 +1041,7 @@ mod tests {
 
     #[test]
     fn test_generate_union_enum() {
-        let mut generator = CodeGenerator::new(HashMap::new());
+        let mut generator = CodeGenerator::new(BTreeMap::new());
         let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
         let (_name, generated_code) = generator
             .generate_union_enum(&union_variants)
@@ -1074,13 +1072,12 @@ mod tests {
             .expect("Failed to parse Avro schema");
 
             let parser = Parser::new(&schemas);
-            let definitions = parser.definitions.clone();
-            let schema_ir = parser.parse().expect("Failed to parse schema IR in test");
+            let definitions = parser.parse().expect("Failed to parse schema IR in test");
 
-            let mut generator = CodeGenerator::new(definitions);
-            let generated_code = generator
-                .generate_all_schemas(&schema_ir)
-                .expect("Failed to generate all schemas in test");
+            let mut generator = CodeGenerator::new(definitions.clone());
+            let generated_code = generator.generate_all_schemas().unwrap_or_else(|_| {
+                panic!("failed to generate all schemas in test, definitions: {definitions:?}")
+            });
             let res = syn::parse2::<File>(generated_code.clone());
             if let Err(e) = res {
                 eprintln!(

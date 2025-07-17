@@ -1,0 +1,35 @@
+
+{
+  "type": "record",
+  "name": "ConfigWithDefaults",
+  "namespace": "com.example",
+  "fields": [
+    {
+      "name": "activeFeatures",
+      "type": {"type": "array", "items": "string"},
+      "default": ["featureA", "featureB"]
+    },
+    {
+      "name": "settingsMap",
+      "type": {"type": "map", "values": "int"},
+      "default": {"timeout": 1000, "retries": 3}
+    },
+    {
+      "name": "status",
+      "type": ["string", "null"],
+      "default": "active"
+    },
+    {
+      "name": "nestedRecordDefault",
+      "type": {
+        "type": "record",
+        "name": "NestedDefault",
+        "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "description", "type": "string"}
+        ]
+      },
+      "default": {"id": 12345, "description": "Default nested item"}
+    }
+  ]
+}

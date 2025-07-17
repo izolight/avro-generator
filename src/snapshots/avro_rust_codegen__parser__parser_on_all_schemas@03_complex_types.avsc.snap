@@ -3,8 +3,8 @@ source: src/parser.rs
 expression: ir_as_json
 input_file: src/test_schemas/03_complex_types.avsc
 ---
-[
-  {
+{
+  "com.example.complex.UserProfile": {
     "Record": {
       "name": "com.example.complex.UserProfile",
       "doc": null,
@@ -55,4 +55,4 @@ input_file: src/test_schemas/03_complex_types.avsc
       }
     }
   }
-]
+}

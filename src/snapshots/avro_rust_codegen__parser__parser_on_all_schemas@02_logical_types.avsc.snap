@@ -3,8 +3,8 @@ source: src/parser.rs
 expression: ir_as_json
 input_file: src/test_schemas/02_logical_types.avsc
 ---
-[
-  {
+{
+  "com.example.logical.EventLog": {
     "Record": {
       "name": "com.example.logical.EventLog",
       "doc": null,
@@ -49,4 +49,4 @@ input_file: src/test_schemas/02_logical_types.avsc
       }
     }
   }
-]
+}

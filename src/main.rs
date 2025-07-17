@@ -65,11 +65,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let parser = AvroParser::new(&raw_schemas);
-    let definitions = parser.definitions.clone();
-    let ir_schemas = parser.parse()?;
+    let definitions = parser.parse()?;
 
-    let mut generator = CodeGenerator::new(definitions);
-    let generated_code = generator.generate_all_schemas(&ir_schemas)?;
+    let mut generator = CodeGenerator::new(definitions.clone());
+    let generated_code = generator.generate_all_schemas()?;
 
     // For now, print to stdout. In a real scenario, write to files in the output directory.
     let parsed_code = syn::parse2(generated_code)

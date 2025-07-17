@@ -1,0 +1,45 @@
+---
+source: src/generator.rs
+expression: formatted_code
+input_file: src/test_schemas/08_complex_defaults.avsc
+---
+pub mod com {
+    pub mod example {
+        #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct ConfigWithDefaults {
+            #[serde(default = default_activeFeatures)]
+            pub activeFeatures: Vec<String>,
+            #[serde(default = default_settingsMap)]
+            pub settingsMap: std::collections::HashMap<String, i32>,
+            #[serde(default = default_status)]
+            pub status: Option<String>,
+            #[serde(default = default_nestedRecordDefault)]
+            pub nestedRecordDefault: NestedDefault,
+        }
+        fn default_activeFeatures() -> Vec<String> {
+            vec!["featureA".to_string(), "featureB".to_string()]
+        }
+        fn default_settingsMap() -> std::collections::HashMap<String, i32> {
+            {
+                let mut m = std::collections::HashMap::new();
+                m.insert("retries".to_string(), 3i32);
+                m.insert("timeout".to_string(), 1000i32);
+                m
+            }
+        }
+        fn default_status() -> Option<String> {
+            "active".to_string()
+        }
+        fn default_nestedRecordDefault() -> NestedDefault {
+            NestedDefault {
+                description: "Default nested item".to_string(),
+                id: 12345i64,
+            }
+        }
+        #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct NestedDefault {
+            pub id: i64,
+            pub description: String,
+        }
+    }
+}

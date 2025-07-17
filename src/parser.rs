@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use apache_avro::Schema;
 use serde_json::Value as JsonValue;
@@ -12,7 +12,7 @@ use crate::ir::{
 /// Parses Avro schemas into the Intermediate Representation (IR).
 pub struct Parser {
     // stores definition of all named types with fully qualified names
-    pub definitions: HashMap<String, SchemaIr>,
+    definitions: BTreeMap<String, SchemaIr>,
     // queue for schemas that need to be parsed
     processing_queue: Vec<(Schema, String)>,
 }
@@ -25,7 +25,7 @@ impl Parser {
     /// * `raw_schemas` - A slice of `apache_avro::Schema` to parse.
     pub fn new(raw_schemas: &[Schema]) -> Self {
         let mut parser = Self {
-            definitions: HashMap::new(),
+            definitions: BTreeMap::new(),
             processing_queue: Vec::new(),
         };
         parser.discover_schemas(raw_schemas, None);
@@ -84,15 +84,12 @@ impl Parser {
     /// # Returns
     ///
     /// A `Result` containing a `Vec<SchemaIr>` of the parsed schemas, or a `ParserError` if parsing fails.
-    pub fn parse(mut self) -> Result<Vec<SchemaIr>, ParserError> {
+    pub fn parse(mut self) -> Result<BTreeMap<String, SchemaIr>, ParserError> {
         // loop over queue until empty
         while let Some((schema, namespace)) = self.processing_queue.pop() {
             self.parse_and_define_schema(&schema, &namespace)?;
         }
-        // sort the result deterministically by the fqn
-        let mut result: Vec<SchemaIr> = self.definitions.into_values().collect();
-        result.sort_by_key(|ir| ir.fqn().to_string());
-        Ok(result)
+        Ok(self.definitions)
     }
 
     /// Parsed a named schema (`Record`, `Enum`, `Fixed`) and saves the definition in the internal
@@ -106,7 +103,7 @@ impl Parser {
             Some(name) => name.fullname(Some(context_namespace.to_string())),
             None => return Ok(()),
         };
-        // check iff we already processed it, if it is not a placeholder, return
+        // check if we already processed it, if it is not a placeholder, return
         if !matches!(
             self.definitions.get(&fqn),
             Some(SchemaIr::Placeholder { .. })

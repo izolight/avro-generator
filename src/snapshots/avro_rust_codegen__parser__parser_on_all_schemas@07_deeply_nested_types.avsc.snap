@@ -3,8 +3,8 @@ source: src/parser.rs
 expression: ir_as_json
 input_file: src/test_schemas/07_deeply_nested_types.avsc
 ---
-[
-  {
+{
+  "com.example.Address": {
     "Record": {
       "name": "com.example.Address",
       "doc": null,
@@ -26,7 +26,7 @@ input_file: src/test_schemas/07_deeply_nested_types.avsc
       }
     }
   },
-  {
+  "com.example.ComplexOrder": {
     "Record": {
       "name": "com.example.ComplexOrder",
       "doc": null,
@@ -71,7 +71,7 @@ input_file: src/test_schemas/07_deeply_nested_types.avsc
       }
     }
   },
-  {
+  "com.example.OrderStatus": {
     "Enum": {
       "name": "com.example.OrderStatus",
       "doc": null,
@@ -85,7 +85,7 @@ input_file: src/test_schemas/07_deeply_nested_types.avsc
       }
     }
   },
-  {
+  "com.example.Product": {
     "Record": {
       "name": "com.example.Product",
       "doc": null,
@@ -107,4 +107,4 @@ input_file: src/test_schemas/07_deeply_nested_types.avsc
       }
     }
   }
-]
+}

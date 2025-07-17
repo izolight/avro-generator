@@ -3,8 +3,8 @@ source: src/parser.rs
 expression: ir_as_json
 input_file: src/test_schemas/04_nested_records.avsc
 ---
-[
-  {
+{
+  "com.example.nested.Customer": {
     "Record": {
       "name": "com.example.nested.Customer",
       "doc": null,
@@ -26,7 +26,7 @@ input_file: src/test_schemas/04_nested_records.avsc
       }
     }
   },
-  {
+  "com.example.nested.Order": {
     "Record": {
       "name": "com.example.nested.Order",
       "doc": null,
@@ -56,4 +56,4 @@ input_file: src/test_schemas/04_nested_records.avsc
       }
     }
   }
-]
+}
