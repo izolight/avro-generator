@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use apache_avro::Schema;
 use serde_json::Value as JsonValue;
@@ -439,7 +439,7 @@ impl Parser {
 
             TypeIr::Map(inner_type) => match json_val {
                 JsonValue::Object(obj) => {
-                    let values: Result<std::collections::HashMap<String, ValueIr>, ParserError> =
+                    let values: Result<std::collections::BTreeMap<String, ValueIr>, ParserError> =
                         obj.iter()
                             .map(|(k, v)| {
                                 Ok((k.clone(), self.resolve_default_value(v, inner_type)?))
@@ -463,7 +463,7 @@ impl Parser {
 
             TypeIr::Record(fqn) => match json_val {
                 JsonValue::Object(obj) => {
-                    let mut record_defaults = HashMap::new();
+                    let mut record_defaults = BTreeMap::new();
                     // Look up the record definition to know its fields
                     let record_ir = self
                         .definitions
@@ -504,12 +504,9 @@ impl Parser {
             }
 
             // The default for an option can only be null.
-            TypeIr::Option(_) => match json_val {
+            TypeIr::Option(inner_type) => match json_val {
                 JsonValue::Null => Ok(ValueIr::Null),
-                _ => Err(ParserError::InvalidDefaultValue {
-                    expected: "null for Option type".to_string(),
-                    found: format!("{:?}", json_val),
-                }),
+                _ => self.resolve_default_value(json_val, inner_type),
             },
         }
     }

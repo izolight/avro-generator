@@ -301,7 +301,7 @@ impl CodeGenerator {
                 Ok(quote! { #enum_path::#variant_name })
             }
             ValueIr::Fixed(b) => Ok(quote! { [#(#b),*] }),
-            ValueIr::Record(map) => {
+            ValueIr::Record(record) => {
                 let record_path = if let TypeIr::Record(fqn) = target_type {
                     self.avro_fqn_to_rust_path(fqn)?
                 } else {
@@ -339,7 +339,7 @@ impl CodeGenerator {
                     .map(|f| (f.name.clone(), f.ty.clone()))
                     .collect();
 
-                let fields = map
+                let fields = record
                     .iter()
                     .map(|(k, v)| {
                         let field_type = field_types.get(k).ok_or_else(|| {
@@ -942,7 +942,7 @@ mod tests {
         );
 
         // Map
-        let mut map_val_b_tree = std::collections::HashMap::new();
+        let mut map_val_b_tree = std::collections::BTreeMap::new();
         map_val_b_tree.insert("a".to_string(), ValueIr::Int(1));
         let map_val = ValueIr::Map(map_val_b_tree);
         let map_type = TypeIr::Map(Box::new(TypeIr::Int));

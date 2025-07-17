@@ -1,0 +1,110 @@
+---
+source: src/parser.rs
+expression: ir_as_json
+input_file: src/test_schemas/07_deeply_nested_types.avsc
+---
+[
+  {
+    "Record": {
+      "name": "com.example.Address",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "street",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "city",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "Record": {
+      "name": "com.example.ComplexOrder",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "orderId",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "items",
+            "doc": null,
+            "ty": {
+              "Array": {
+                "Union": [
+                  "String",
+                  "Int",
+                  {
+                    "Record": "com.example.Product"
+                  },
+                  {
+                    "Enum": "com.example.OrderStatus"
+                  }
+                ]
+              }
+            },
+            "default": null
+          },
+          {
+            "name": "deliveryInfo",
+            "doc": null,
+            "ty": {
+              "Option": {
+                "Record": "com.example.Address"
+              }
+            },
+            "default": "Null"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "Enum": {
+      "name": "com.example.OrderStatus",
+      "doc": null,
+      "inner": {
+        "symbols": [
+          "PENDING",
+          "SHIPPED",
+          "DELIVERED",
+          "CANCELLED"
+        ]
+      }
+    }
+  },
+  {
+    "Record": {
+      "name": "com.example.Product",
+      "doc": null,
+      "inner": {
+        "fields": [
+          {
+            "name": "name",
+            "doc": null,
+            "ty": "String",
+            "default": null
+          },
+          {
+            "name": "price",
+            "doc": null,
+            "ty": "Double",
+            "default": null
+          }
+        ]
+      }
+    }
+  }
+]
