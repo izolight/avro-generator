@@ -38,14 +38,12 @@ avro-rust-codegen -i <INPUT_PATH> -o <OUTPUT_DIR>
 
 1. **Generate code from a single schema file:**
 
-    ```bash
-    avro-rust-codegen -i schemas/user.avsc -o src/generated
-    ```
+   ```bash
+   avro-rust-codegen -i schemas/user.avsc -o src/generated
+   ```
 
 2. **Generate code from all schema files in a directory:**
 
-    ```bash
-    avro-rust-codegen -i schemas/ -o src/generated
-    ```
-
-Currently, the generated code is printed to `stdout`. In future versions, it will be written to files within the specified output directory.
+   ```bash
+   avro-rust-codegen -i schemas/ -o src/generated
+   ```

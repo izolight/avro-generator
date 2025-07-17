@@ -19,6 +19,3 @@ thiserror = "2.0.12"
 uuid = "1.17.0"
 clap = { version = "4.0", features = ["derive"] }
 prettyplease = "0.2.0"
-
-[dev-dependencies]
-prettyplease = "0.2.0"

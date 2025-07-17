@@ -57,23 +57,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Helper function to recursively find Avro schemas
-fn find_avro_schemas_recursive(
-    path: &Path,
-    raw_schemas: &mut Vec<Schema>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().is_some_and(|ext| ext == "avsc") {
-            let schema_str = fs::read_to_string(&path)?;
-            let schema = Schema::parse_str(&schema_str)?;
-            raw_schemas.push(schema);
-        } else if path.is_dir() {
-            find_avro_schemas_recursive(&path, raw_schemas)?;
+    fn find_avro_schemas_recursive(
+        path: &Path,
+        raw_schemas: &mut Vec<Schema>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "avsc") {
+                let schema_str = fs::read_to_string(&path)?;
+                let schema = Schema::parse_str(&schema_str)?;
+                raw_schemas.push(schema);
+            } else if path.is_dir() {
+                find_avro_schemas_recursive(&path, raw_schemas)?;
+            }
         }
+        Ok(())
     }
-    Ok(())
-}
 
     let parser = AvroParser::new(&raw_schemas);
     let definitions = parser.parse()?;
@@ -84,7 +84,10 @@ fn find_avro_schemas_recursive(
     // For now, print to stdout. In a real scenario, write to files in the output directory.
     let parsed_code = syn::parse2(generated_code)
         .map_err(|e| format!("Failed to parse generated code: {}", e))?;
-    println!("{}", prettyplease::unparse(&parsed_code));
+
+    let output_file_path = output_path.join("mod.rs");
+    fs::write(&output_file_path, prettyplease::unparse(&parsed_code))?;
+    println!("Generated code written to: {}", output_file_path.display());
 
     Ok(())
 }
