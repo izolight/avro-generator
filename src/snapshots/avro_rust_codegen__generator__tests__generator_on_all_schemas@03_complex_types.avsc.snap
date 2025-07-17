@@ -13,40 +13,40 @@ pub mod com {
                 pub profile_data: std::collections::HashMap<String, String>,
                 #[serde(default = default_last_known_ip)]
                 pub last_known_ip: Option<String>,
-                pub last_login_type: UnionStringi64,
+                pub last_login_type: UnionLongString,
             }
             fn default_last_known_ip() -> Option<String> {
                 None
             }
             #[derive(Debug, PartialEq, Clone)]
             #[serde(remote = "Self")]
-            pub enum UnionStringi64 {
+            pub enum UnionLongString {
                 String(String),
                 Long(i64),
             }
-            impl From<String> for UnionStringi64 {
+            impl From<String> for UnionLongString {
                 fn from(v: String) -> Self {
                     Self::String(v)
                 }
             }
-            impl From<i64> for UnionStringi64 {
+            impl From<i64> for UnionLongString {
                 fn from(v: i64) -> Self {
                     Self::Long(v)
                 }
             }
-            impl TryFrom<UnionStringi64> for String {
-                type Error = UnionStringi64;
-                fn try_from(v: UnionStringi64) -> Result<Self, Self::Error> {
-                    if let UnionStringi64::String(v) = v { Ok(v) } else { Err(v) }
+            impl TryFrom<UnionLongString> for String {
+                type Error = UnionLongString;
+                fn try_from(v: UnionLongString) -> Result<Self, Self::Error> {
+                    if let UnionLongString::String(v) = v { Ok(v) } else { Err(v) }
                 }
             }
-            impl TryFrom<UnionStringi64> for i64 {
-                type Error = UnionStringi64;
-                fn try_from(v: UnionStringi64) -> Result<Self, Self::Error> {
-                    if let UnionStringi64::Long(v) = v { Ok(v) } else { Err(v) }
+            impl TryFrom<UnionLongString> for i64 {
+                type Error = UnionLongString;
+                fn try_from(v: UnionLongString) -> Result<Self, Self::Error> {
+                    if let UnionLongString::Long(v) = v { Ok(v) } else { Err(v) }
                 }
             }
-            impl serde::Serialize for UnionStringi64 {
+            impl serde::Serialize for UnionLongString {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
                     S: serde::Serializer,
@@ -57,33 +57,33 @@ pub mod com {
                     }
                 }
             }
-            impl<'de> serde::Deserialize<'de> for UnionStringi64 {
+            impl<'de> serde::Deserialize<'de> for UnionLongString {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
                     D: serde::Deserializer<'de>,
                 {
                     struct UnionVisitor;
                     impl<'de> serde::de::Visitor<'de> for UnionVisitor {
-                        type Value = UnionStringi64;
+                        type Value = UnionLongString;
                         fn expecting(
                             &self,
                             formatter: &mut std::fmt::Formatter,
                         ) -> std::fmt::Result {
                             formatter::write_str(
-                                format!(" {}", stringify!(UnionStringi64)).as_str(),
+                                format!(" {}", stringify!(UnionLongString)).as_str(),
                             )
                         }
                         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
                         where
                             E: serde::de::Error,
                         {
-                            Ok(UnionStringi64::String(value.into()))
+                            Ok(UnionLongString::String(value.into()))
                         }
                         fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
                         where
                             E: serde::de::Error,
                         {
-                            Ok(UnionStringi64::Long(value.into()))
+                            Ok(UnionLongString::Long(value.into()))
                         }
                     }
                     deserializer.deserialize_any(UnionVisitor)

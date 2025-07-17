@@ -121,6 +121,40 @@ impl CodeGenerator {
         })
     }
 
+    /// Generates a name for types that will be used when generating union types
+    fn type_ir_to_short_name(&self, ty_ir: &TypeIr) -> String {
+        match ty_ir {
+            TypeIr::Null => "Null".to_string(),
+            TypeIr::Boolean => "Boolean".to_string(),
+            TypeIr::Int => "Int".to_string(),
+            TypeIr::Long => "Long".to_string(),
+            TypeIr::Float => "Float".to_string(),
+            TypeIr::Double => "Double".to_string(),
+            TypeIr::Bytes => "Bytes".to_string(),
+            TypeIr::String => "String".to_string(),
+            TypeIr::Date => "Date".to_string(),
+            TypeIr::TimeMillis => "TimeMillis".to_string(),
+            TypeIr::TimeMicros => "TimeMicros".to_string(),
+            TypeIr::TimestampMillis | TypeIr::TimestampMicros | TypeIr::TimestampNanos => {
+                "Timestamp".to_string()
+            }
+            TypeIr::LocalTimestampMillis
+            | TypeIr::LocalTimestampMicros
+            | TypeIr::LocalTimestampNanos => "LocalTimestamp".to_string(),
+            TypeIr::Duration => "Duration".to_string(),
+            TypeIr::Uuid => "Uuid".to_string(),
+            TypeIr::Decimal { .. } => "Decimal".to_string(),
+            TypeIr::BigDecimal => "BigDecimal".to_string(),
+            TypeIr::Array(inner) => format!("ArrayOf{}", self.type_ir_to_short_name(inner)),
+            TypeIr::Map(inner) => format!("MapOf{}", self.type_ir_to_short_name(inner)),
+            TypeIr::Option(inner) => format!("OptionOf{}", self.type_ir_to_short_name(inner)),
+            TypeIr::Union(_) => "Union".to_string(), // Should not happen for inner unions
+            TypeIr::Record(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
+            TypeIr::Enum(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
+            TypeIr::Fixed(fqn) => self.avro_fqn_to_rust_name(fqn).unwrap().to_string(),
+        }
+    }
+
     /// Maps an `TypeIr` to its corresponding Rust `Type` and an optional `TokenStream` for generated union enums.
     ///
     /// # Arguments
@@ -541,17 +575,9 @@ impl CodeGenerator {
         union_ir_variants: &[TypeIr],
     ) -> Result<(Ident, TokenStream), GeneratorError> {
         // determine stable name
-        let sorted_rust_types = union_ir_variants
+        let mut sorted_rust_types: Vec<String> = union_ir_variants
             .iter()
-            .map(|ty_ir| self.map_type_ir_to_rust_type(ty_ir).map(|(t, _)| t))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut sorted_rust_types: Vec<String> = sorted_rust_types
-            .iter()
-            .map(|t| quote!(#t).to_string())
-            .map(|t| match t.as_str() {
-                "()" => "Null".to_string(),
-                _ => t,
-            })
+            .map(|ty_ir| self.type_ir_to_short_name(ty_ir))
             .collect();
         sorted_rust_types.sort();
 

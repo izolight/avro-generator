@@ -4,45 +4,45 @@ expression: formatted_code
 ---
 #[derive(Debug, PartialEq, Clone)]
 #[serde(remote = "Self")]
-pub enum UnionStringbooli32 {
+pub enum UnionBooleanIntString {
     String(String),
     Int(i32),
     Boolean(bool),
 }
-impl From<String> for UnionStringbooli32 {
+impl From<String> for UnionBooleanIntString {
     fn from(v: String) -> Self {
         Self::String(v)
     }
 }
-impl From<i32> for UnionStringbooli32 {
+impl From<i32> for UnionBooleanIntString {
     fn from(v: i32) -> Self {
         Self::Int(v)
     }
 }
-impl From<bool> for UnionStringbooli32 {
+impl From<bool> for UnionBooleanIntString {
     fn from(v: bool) -> Self {
         Self::Boolean(v)
     }
 }
-impl TryFrom<UnionStringbooli32> for String {
-    type Error = UnionStringbooli32;
-    fn try_from(v: UnionStringbooli32) -> Result<Self, Self::Error> {
-        if let UnionStringbooli32::String(v) = v { Ok(v) } else { Err(v) }
+impl TryFrom<UnionBooleanIntString> for String {
+    type Error = UnionBooleanIntString;
+    fn try_from(v: UnionBooleanIntString) -> Result<Self, Self::Error> {
+        if let UnionBooleanIntString::String(v) = v { Ok(v) } else { Err(v) }
     }
 }
-impl TryFrom<UnionStringbooli32> for i32 {
-    type Error = UnionStringbooli32;
-    fn try_from(v: UnionStringbooli32) -> Result<Self, Self::Error> {
-        if let UnionStringbooli32::Int(v) = v { Ok(v) } else { Err(v) }
+impl TryFrom<UnionBooleanIntString> for i32 {
+    type Error = UnionBooleanIntString;
+    fn try_from(v: UnionBooleanIntString) -> Result<Self, Self::Error> {
+        if let UnionBooleanIntString::Int(v) = v { Ok(v) } else { Err(v) }
     }
 }
-impl TryFrom<UnionStringbooli32> for bool {
-    type Error = UnionStringbooli32;
-    fn try_from(v: UnionStringbooli32) -> Result<Self, Self::Error> {
-        if let UnionStringbooli32::Boolean(v) = v { Ok(v) } else { Err(v) }
+impl TryFrom<UnionBooleanIntString> for bool {
+    type Error = UnionBooleanIntString;
+    fn try_from(v: UnionBooleanIntString) -> Result<Self, Self::Error> {
+        if let UnionBooleanIntString::Boolean(v) = v { Ok(v) } else { Err(v) }
     }
 }
-impl serde::Serialize for UnionStringbooli32 {
+impl serde::Serialize for UnionBooleanIntString {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -54,39 +54,39 @@ impl serde::Serialize for UnionStringbooli32 {
         }
     }
 }
-impl<'de> serde::Deserialize<'de> for UnionStringbooli32 {
+impl<'de> serde::Deserialize<'de> for UnionBooleanIntString {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         struct UnionVisitor;
         impl<'de> serde::de::Visitor<'de> for UnionVisitor {
-            type Value = UnionStringbooli32;
+            type Value = UnionBooleanIntString;
             fn expecting(
                 &self,
                 formatter: &mut std::fmt::Formatter,
             ) -> std::fmt::Result {
                 formatter::write_str(
-                    format!(" {}", stringify!(UnionStringbooli32)).as_str(),
+                    format!(" {}", stringify!(UnionBooleanIntString)).as_str(),
                 )
             }
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
-                Ok(UnionStringbooli32::String(value.into()))
+                Ok(UnionBooleanIntString::String(value.into()))
             }
             fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
-                Ok(UnionStringbooli32::Int(value.into()))
+                Ok(UnionBooleanIntString::Int(value.into()))
             }
             fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
-                Ok(UnionStringbooli32::Boolean(value.into()))
+                Ok(UnionBooleanIntString::Boolean(value.into()))
             }
         }
         deserializer.deserialize_any(UnionVisitor)
