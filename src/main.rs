@@ -4,7 +4,7 @@ mod ir;
 mod parser;
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use apache_avro::Schema;
 use clap::Parser;
@@ -51,18 +51,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let schema = Schema::parse_str(&schema_str)?;
         raw_schemas.push(schema);
     } else if input_path.is_dir() {
-        for entry in fs::read_dir(&input_path)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "avsc") {
-                let schema_str = fs::read_to_string(&path)?;
-                let schema = Schema::parse_str(&schema_str)?;
-                raw_schemas.push(schema);
-            }
-        }
+        find_avro_schemas_recursive(&input_path, &mut raw_schemas)?;
     } else {
         return Err(format!("Input path does not exist: {}", args.input).into());
     }
+
+    // Helper function to recursively find Avro schemas
+fn find_avro_schemas_recursive(
+    path: &Path,
+    raw_schemas: &mut Vec<Schema>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "avsc") {
+            let schema_str = fs::read_to_string(&path)?;
+            let schema = Schema::parse_str(&schema_str)?;
+            raw_schemas.push(schema);
+        } else if path.is_dir() {
+            find_avro_schemas_recursive(&path, raw_schemas)?;
+        }
+    }
+    Ok(())
+}
 
     let parser = AvroParser::new(&raw_schemas);
     let definitions = parser.parse()?;
