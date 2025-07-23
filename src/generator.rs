@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -29,7 +29,10 @@ impl CodeGenerator {
     }
 
     /// Generates a `TokenStream` for a single `SchemaIr`
-    pub fn generate_schema(&mut self, schema_ir: &SchemaIr) -> Result<TokenStream, GeneratorError> {
+    pub fn generate_schema(
+        &mut self,
+        schema_ir: &SchemaIr,
+    ) -> Result<(TokenStream, BTreeSet<String>), GeneratorError> {
         self.current_schema_fqn = schema_ir.fqn().to_string();
         match schema_ir {
             SchemaIr::Record(record_ir) => self.generate_record(record_ir),
@@ -43,7 +46,6 @@ impl CodeGenerator {
     pub fn generate_all_schemas(&mut self) -> Result<TokenStream, GeneratorError> {
         let schemas: Vec<_> = self.definitions.values().cloned().collect();
         let mut root = ModuleNode::new(None);
-        let mut errors = vec![];
 
         for schema_ir in schemas {
             let fqn = schema_ir.fqn();
@@ -54,15 +56,12 @@ impl CodeGenerator {
                 root.add_schema(namespace_parts, &schema_ir, self)?;
             } else {
                 // It's in the global namespace
-                let code = self.generate_schema(&schema_ir).map_err(|e| errors.push(e));
-                if let Ok(c) = code {
-                    root.code.extend(c);
+                let (code, imports) = self.generate_schema(&schema_ir)?;
+                root.code.extend(code);
+                for import in imports {
+                    root.add_import(&import);
                 }
             }
-        }
-
-        if !errors.is_empty() {
-            return Err(GeneratorError::MultipleError(errors));
         }
 
         Ok(root.to_token_stream())
@@ -215,10 +214,17 @@ impl CodeGenerator {
                 Ok((parse_quote! { Option<#inner_type> }, gen_union))
             }
             TypeIr::Union(variants) => {
-                let (union_enum_name, enum_tokens) = self.generate_union_enum(variants)?;
+                let (union_enum_name, enum_tokens, imports) = self.generate_union_enum(variants)?;
                 Ok((parse_quote! { #union_enum_name }, Some(enum_tokens)))
             }
-            TypeIr::Record(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
+            TypeIr::Record(fqn) => {
+                let mut rust_type = self.avro_fqn_to_rust_path(fqn)?;
+                // If the record is recursive, wrap it in a Box
+                if fqn == &self.current_schema_fqn {
+                    rust_type = parse_quote! { Box<#rust_type> };
+                }
+                Ok((rust_type, None))
+            }
             TypeIr::Enum(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
             TypeIr::Fixed(fqn) => Ok((self.avro_fqn_to_rust_path(fqn)?, None)),
         }
@@ -406,12 +412,17 @@ impl CodeGenerator {
     /// # Returns
     ///
     /// A `Result` containing the `TokenStream` for the generated Rust struct, or a `GeneratorError`.
-    fn generate_record(&mut self, record_ir: &RecordIr) -> Result<TokenStream, GeneratorError> {
+    fn generate_record(
+        &mut self,
+        record_ir: &RecordIr,
+    ) -> Result<(TokenStream, BTreeSet<String>), GeneratorError> {
         let struct_name = self.avro_fqn_to_rust_name(&record_ir.name)?;
         let doc = &record_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
 
         let mut field_tokens = Vec::new();
         let mut union_tokens = TokenStream::new();
+        let mut imports = BTreeSet::new();
+        imports.insert("use serde::{Serialize, Deserialize};".to_string());
 
         for field in &record_ir.inner.fields {
             let field_name = self.avro_fqn_to_rust_name(&field.name)?;
@@ -425,7 +436,8 @@ impl CodeGenerator {
             let field_doc = &field.doc.as_ref().map(|d| quote! { #[doc = #d] });
 
             let default_attr = if field.default.is_some() {
-                quote! { #[serde(default = #fn_name)] }
+                let fn_name_str = fn_name.to_string();
+                quote! { #[serde(default = #fn_name_str)] }
             } else {
                 quote! {}
             };
@@ -451,17 +463,20 @@ impl CodeGenerator {
             }
         }
 
-        Ok(quote! {
-            #doc
-            #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-            pub struct #struct_name {
-                #(#field_tokens),*
-            }
+        Ok((
+            quote! {
+                #doc
+                #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+                pub struct #struct_name {
+                    #(#field_tokens),*
+                }
 
-            #(#default_fns)*
+                #(#default_fns)*
 
-            #union_tokens
-        })
+                #union_tokens
+            },
+            imports,
+        ))
     }
 
     /// Generates Rust code for an Avro Enum schema.
@@ -473,7 +488,10 @@ impl CodeGenerator {
     /// # Returns
     ///
     /// A `Result` containing the `TokenStream` for the generated Rust enum, or a `GeneratorError`.
-    fn generate_enum(&self, enum_ir: &EnumIr) -> Result<TokenStream, GeneratorError> {
+    fn generate_enum(
+        &self,
+        enum_ir: &EnumIr,
+    ) -> Result<(TokenStream, BTreeSet<String>), GeneratorError> {
         let enum_name = self.avro_fqn_to_rust_name(&enum_ir.name)?;
         let doc = &enum_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
         let variant_names: Vec<Ident> = enum_ir
@@ -486,13 +504,19 @@ impl CodeGenerator {
             quote! { #variant_name }
         });
 
-        Ok(quote! {
-            #doc
-            #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
-            pub enum #enum_name {
-                #(#variants),*
-            }
-        })
+        let mut imports = BTreeSet::new();
+        imports.insert("use serde::{Serialize, Deserialize};".to_string());
+
+        Ok((
+            quote! {
+                #doc
+                #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+                pub enum #enum_name {
+                    #(#variants),*
+                }
+            },
+            imports,
+        ))
     }
 
     /// Generates Rust code for an Avro Fixed schema.
@@ -504,15 +528,24 @@ impl CodeGenerator {
     /// # Returns
     ///
     /// A `Result` containing the `TokenStream` for the generated Rust type alias, or a `GeneratorError`.
-    fn generate_fixed(&self, fixed_ir: &FixedIr) -> Result<TokenStream, GeneratorError> {
+    fn generate_fixed(
+        &self,
+        fixed_ir: &FixedIr,
+    ) -> Result<(TokenStream, BTreeSet<String>), GeneratorError> {
         let type_name = self.avro_fqn_to_rust_name(&fixed_ir.name)?;
         let doc = &fixed_ir.doc.as_ref().map(|d| quote! { #[doc = #d] });
         let size = fixed_ir.inner.size;
 
-        Ok(quote! {
-            #doc
-            pub type #type_name = [u8; #size];
-        })
+        let mut imports = BTreeSet::new();
+        imports.insert("use serde::{Serialize, Deserialize};".to_string());
+
+        Ok((
+            quote! {
+                #doc
+                pub type #type_name = [u8; #size];
+            },
+            imports,
+        ))
     }
 
     /// Determines the Rust `Ident` for a union variant based on its `TypeIr`.
@@ -583,7 +616,7 @@ impl CodeGenerator {
     fn generate_union_enum(
         &mut self,
         union_ir_variants: &[TypeIr],
-    ) -> Result<(Ident, TokenStream), GeneratorError> {
+    ) -> Result<(Ident, TokenStream, BTreeSet<String>), GeneratorError> {
         // determine stable name
         let mut sorted_rust_types: Vec<String> = union_ir_variants
             .iter()
@@ -595,13 +628,26 @@ impl CodeGenerator {
         let union_enum_name = format_ident!("{}", union_enum_name_str);
         // check if this enum has already been generated
         if let Some(existing_tokens) = self.generated_union_enums.get(&union_enum_name_str) {
-            return Ok((union_enum_name, existing_tokens.clone()));
+            // If already generated, we still need to return the imports that were generated with it
+            // This is a simplification for now, ideally we'd store imports with the generated_union_enums
+            // For now, we'll re-derive the imports from the types, which is inefficient but correct.
+            let mut imports = BTreeSet::new();
+            imports.insert("use serde::{Serialize, Deserialize};".to_string());
+            for ty_ir in union_ir_variants {
+                collect_imports_for_type(ty_ir, &mut imports)?;
+            }
+            return Ok((union_enum_name, existing_tokens.clone(), imports));
         }
 
         let mut variants_data = Vec::new();
+        let mut imports = BTreeSet::new();
+        imports.insert("use serde::{Serialize, Deserialize};".to_string());
+
         for (index, ty_ir) in union_ir_variants.iter().enumerate() {
             let (rust_type, _) = self.map_type_ir_to_rust_type(ty_ir)?;
             let variant_ident = self.get_union_variant_name(ty_ir)?;
+
+            collect_imports_for_type(ty_ir, &mut imports)?;
 
             let serde_vistor_method = self.get_serde_visitor_method(ty_ir);
             #[allow(clippy::cast_possible_truncation)]
@@ -681,8 +727,9 @@ impl CodeGenerator {
         });
 
         let enum_definition = quote! {
+            use serde::{Serialize, Deserialize};
+
             #[derive(Debug, PartialEq, Clone)]
-            #[serde(remote = "Self")]
             pub enum #union_enum_name {
                 #(#enum_variants),*
             }
@@ -724,7 +771,7 @@ impl CodeGenerator {
         };
         self.generated_union_enums
             .insert(union_enum_name_str, enum_definition.clone());
-        Ok((union_enum_name, enum_definition))
+        Ok((union_enum_name, enum_definition, imports))
     }
 }
 
@@ -734,6 +781,7 @@ struct ModuleNode {
     name: Option<String>,
     submodules: BTreeMap<String, ModuleNode>,
     code: TokenStream,
+    imports: std::collections::BTreeSet<String>,
 }
 
 impl ModuleNode {
@@ -747,7 +795,12 @@ impl ModuleNode {
             name,
             submodules: BTreeMap::new(),
             code: TokenStream::new(),
+            imports: std::collections::BTreeSet::new(),
         }
+    }
+
+    fn add_import(&mut self, import_statement: &str) {
+        self.imports.insert(import_statement.to_string());
     }
 
     /// Adds a schema to the module tree, creating submodules as needed.
@@ -773,8 +826,11 @@ impl ModuleNode {
                 .or_insert_with(|| ModuleNode::new(Some((*first).to_string())))
                 .add_schema(rest, schema_ir, generator)?;
         } else {
-            let schema_code = generator.generate_schema(schema_ir)?;
+            let (schema_code, imports) = generator.generate_schema(schema_ir)?;
             self.code.extend(schema_code);
+            for import in imports {
+                self.add_import(import.as_str());
+            }
         }
         Ok(())
     }
@@ -788,11 +844,16 @@ impl ModuleNode {
         let submodules_tokens = self.submodules.values().map(ModuleNode::to_token_stream);
 
         let code = &self.code;
+        let imports = self
+            .imports
+            .iter()
+            .map(|s| s.parse::<TokenStream>().unwrap());
 
         if let Some(name) = &self.name {
             let ident = format_ident!("{}", name);
             quote! {
                 pub mod #ident {
+                    #(#imports)*
                     #(#submodules_tokens)*
                     #code
                 }
@@ -800,11 +861,58 @@ impl ModuleNode {
         } else {
             // Root node
             quote! {
+                #(#imports)*
                 #(#submodules_tokens)*
                 #code
             }
         }
     }
+}
+
+fn collect_imports_for_type(
+    ty_ir: &TypeIr,
+    imports: &mut BTreeSet<String>,
+) -> Result<(), GeneratorError> {
+    match ty_ir {
+        TypeIr::Date
+        | TypeIr::TimeMillis
+        | TypeIr::TimeMicros
+        | TypeIr::TimestampMillis
+        | TypeIr::TimestampMicros
+        | TypeIr::TimestampNanos
+        | TypeIr::LocalTimestampMillis
+        | TypeIr::LocalTimestampMicros
+        | TypeIr::LocalTimestampNanos => {
+            imports.insert(
+                "use chrono::{NaiveDate, Duration, DateTime, Utc, NaiveDateTime};".to_string(),
+            );
+        }
+        TypeIr::Duration => {
+            imports.insert("use apache_avro::Duration;".to_string());
+        }
+        TypeIr::Uuid => {
+            imports.insert("use uuid::Uuid;".to_string());
+        }
+        TypeIr::Decimal { .. } => {
+            imports.insert("use rust_decimal::Decimal;".to_string());
+        }
+        TypeIr::BigDecimal => {
+            imports.insert("use bigdecimal::BigDecimal;".to_string());
+        }
+        TypeIr::Array(inner) => collect_imports_for_type(inner, imports)?,
+        TypeIr::Map(inner) => {
+            imports.insert("use std::collections::HashMap;".to_string());
+            collect_imports_for_type(inner, imports)?;
+        }
+        TypeIr::Option(inner) => collect_imports_for_type(inner, imports)?,
+        TypeIr::Union(variants) => {
+            for variant in variants {
+                collect_imports_for_type(variant, imports)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn is_rust_keyword(s: &str) -> bool {
@@ -1076,7 +1184,7 @@ mod tests {
                 ],
             },
         };
-        let generated_code = generator
+        let (generated_code, imports) = generator
             .generate_record(&record_ir)
             .expect("Record generation failed");
         let formatted_code = prettyplease::unparse(
@@ -1101,7 +1209,7 @@ mod tests {
                 ],
             },
         };
-        let generated_code = generator
+        let (generated_code, imports) = generator
             .generate_enum(&enum_ir)
             .expect("Enum generation failed");
         let formatted_code = prettyplease::unparse(
@@ -1119,7 +1227,7 @@ mod tests {
             doc: None,
             inner: FixedDetails { size: 16 },
         };
-        let generated_code = generator
+        let (generated_code, imports) = generator
             .generate_fixed(&fixed_ir)
             .expect("Fixed generation failed");
         let formatted_code = prettyplease::unparse(
@@ -1133,7 +1241,7 @@ mod tests {
     fn test_generate_union_enum() {
         let mut generator = CodeGenerator::new(BTreeMap::new());
         let union_variants = vec![TypeIr::String, TypeIr::Int, TypeIr::Boolean];
-        let (_name, generated_code) = generator
+        let (_name, generated_code, imports) = generator
             .generate_union_enum(&union_variants)
             .expect("Union enum generation failed");
         let formatted_code = prettyplease::unparse(

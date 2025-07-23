@@ -1,0 +1,96 @@
+---
+source: src/generator.rs
+assertion_line: 1294
+expression: formatted_code
+input_file: src/test_schemas/03_complex_types.avsc
+---
+pub mod com {
+    pub mod example {
+        pub mod complex {
+            use serde::{Serialize, Deserialize};
+            #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+            pub struct UserProfile {
+                pub user_id: i64,
+                pub aliases: Vec<String>,
+                pub profile_data: std::collections::HashMap<String, String>,
+                #[serde(default = "default_last_known_ip")]
+                pub last_known_ip: Option<String>,
+                pub last_login_type: UnionLongString,
+            }
+            fn default_last_known_ip() -> Option<String> {
+                None
+            }
+            use serde::{Serialize, Deserialize};
+            #[derive(Debug, PartialEq, Clone)]
+            pub enum UnionLongString {
+                String(String),
+                Long(i64),
+            }
+            impl From<String> for UnionLongString {
+                fn from(v: String) -> Self {
+                    Self::String(v)
+                }
+            }
+            impl From<i64> for UnionLongString {
+                fn from(v: i64) -> Self {
+                    Self::Long(v)
+                }
+            }
+            impl TryFrom<UnionLongString> for String {
+                type Error = UnionLongString;
+                fn try_from(v: UnionLongString) -> Result<Self, Self::Error> {
+                    if let UnionLongString::String(v) = v { Ok(v) } else { Err(v) }
+                }
+            }
+            impl TryFrom<UnionLongString> for i64 {
+                type Error = UnionLongString;
+                fn try_from(v: UnionLongString) -> Result<Self, Self::Error> {
+                    if let UnionLongString::Long(v) = v { Ok(v) } else { Err(v) }
+                }
+            }
+            impl serde::Serialize for UnionLongString {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    match self {
+                        Self::String(value) => value.serialize(serializer),
+                        Self::Long(value) => value.serialize(serializer),
+                    }
+                }
+            }
+            impl<'de> serde::Deserialize<'de> for UnionLongString {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    struct UnionVisitor;
+                    impl<'de> serde::de::Visitor<'de> for UnionVisitor {
+                        type Value = UnionLongString;
+                        fn expecting(
+                            &self,
+                            formatter: &mut std::fmt::Formatter,
+                        ) -> std::fmt::Result {
+                            formatter::write_str(
+                                format!(" {}", stringify!(UnionLongString)).as_str(),
+                            )
+                        }
+                        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            Ok(UnionLongString::String(value.into()))
+                        }
+                        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            Ok(UnionLongString::Long(value.into()))
+                        }
+                    }
+                    deserializer.deserialize_any(UnionVisitor)
+                }
+            }
+        }
+    }
+}

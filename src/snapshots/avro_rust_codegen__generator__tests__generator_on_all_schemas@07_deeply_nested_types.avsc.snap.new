@@ -1,0 +1,160 @@
+---
+source: src/generator.rs
+assertion_line: 1294
+expression: formatted_code
+input_file: src/test_schemas/07_deeply_nested_types.avsc
+---
+pub mod com {
+    pub mod example {
+        use serde::{Serialize, Deserialize};
+        #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+        pub struct Address {
+            pub street: String,
+            pub city: String,
+        }
+        #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+        pub struct ComplexOrder {
+            pub orderId: String,
+            pub items: Vec<UnionIntOrderStatusProductString>,
+            #[serde(default = "default_deliveryInfo")]
+            pub deliveryInfo: Option<Address>,
+        }
+        fn default_deliveryInfo() -> Option<Address> {
+            None
+        }
+        use serde::{Serialize, Deserialize};
+        #[derive(Debug, PartialEq, Clone)]
+        pub enum UnionIntOrderStatusProductString {
+            String(String),
+            Int(i32),
+            Product(Product),
+            OrderStatus(OrderStatus),
+        }
+        impl From<String> for UnionIntOrderStatusProductString {
+            fn from(v: String) -> Self {
+                Self::String(v)
+            }
+        }
+        impl From<i32> for UnionIntOrderStatusProductString {
+            fn from(v: i32) -> Self {
+                Self::Int(v)
+            }
+        }
+        impl From<Product> for UnionIntOrderStatusProductString {
+            fn from(v: Product) -> Self {
+                Self::Product(v)
+            }
+        }
+        impl From<OrderStatus> for UnionIntOrderStatusProductString {
+            fn from(v: OrderStatus) -> Self {
+                Self::OrderStatus(v)
+            }
+        }
+        impl TryFrom<UnionIntOrderStatusProductString> for String {
+            type Error = UnionIntOrderStatusProductString;
+            fn try_from(
+                v: UnionIntOrderStatusProductString,
+            ) -> Result<Self, Self::Error> {
+                if let UnionIntOrderStatusProductString::String(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionIntOrderStatusProductString> for i32 {
+            type Error = UnionIntOrderStatusProductString;
+            fn try_from(
+                v: UnionIntOrderStatusProductString,
+            ) -> Result<Self, Self::Error> {
+                if let UnionIntOrderStatusProductString::Int(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionIntOrderStatusProductString> for Product {
+            type Error = UnionIntOrderStatusProductString;
+            fn try_from(
+                v: UnionIntOrderStatusProductString,
+            ) -> Result<Self, Self::Error> {
+                if let UnionIntOrderStatusProductString::Product(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionIntOrderStatusProductString> for OrderStatus {
+            type Error = UnionIntOrderStatusProductString;
+            fn try_from(
+                v: UnionIntOrderStatusProductString,
+            ) -> Result<Self, Self::Error> {
+                if let UnionIntOrderStatusProductString::OrderStatus(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl serde::Serialize for UnionIntOrderStatusProductString {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                match self {
+                    Self::String(value) => value.serialize(serializer),
+                    Self::Int(value) => value.serialize(serializer),
+                    Self::Product(value) => value.serialize(serializer),
+                    Self::OrderStatus(value) => value.serialize(serializer),
+                }
+            }
+        }
+        impl<'de> serde::Deserialize<'de> for UnionIntOrderStatusProductString {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct UnionVisitor;
+                impl<'de> serde::de::Visitor<'de> for UnionVisitor {
+                    type Value = UnionIntOrderStatusProductString;
+                    fn expecting(
+                        &self,
+                        formatter: &mut std::fmt::Formatter,
+                    ) -> std::fmt::Result {
+                        formatter::write_str(
+                            format!(" {}", stringify!(UnionIntOrderStatusProductString))
+                                .as_str(),
+                        )
+                    }
+                    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        Ok(UnionIntOrderStatusProductString::String(value.into()))
+                    }
+                    fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        Ok(UnionIntOrderStatusProductString::Int(value.into()))
+                    }
+                }
+                deserializer.deserialize_any(UnionVisitor)
+            }
+        }
+        #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+        pub enum OrderStatus {
+            PENDING,
+            SHIPPED,
+            DELIVERED,
+            CANCELLED,
+        }
+        #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+        pub struct Product {
+            pub name: String,
+            pub price: f64,
+        }
+    }
+}

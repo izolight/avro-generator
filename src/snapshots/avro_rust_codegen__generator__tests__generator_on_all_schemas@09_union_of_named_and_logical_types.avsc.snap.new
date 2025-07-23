@@ -1,0 +1,207 @@
+---
+source: src/generator.rs
+assertion_line: 1294
+expression: formatted_code
+input_file: src/test_schemas/09_union_of_named_and_logical_types.avsc
+---
+pub mod com {
+    pub mod example {
+        use serde::{Serialize, Deserialize};
+        #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+        pub struct EventMetadata {
+            pub source: String,
+            pub timestamp: chrono::DateTime<chrono::Utc>,
+        }
+        #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+        pub enum EventType {
+            LOGIN,
+            LOGOUT,
+            PURCHASE,
+            VIEW,
+        }
+        #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+        pub struct UserActivity {
+            pub userId: String,
+            pub activityDetails: UnionEventMetadataEventTypeIntNullStringTimestamp,
+        }
+        use serde::{Serialize, Deserialize};
+        #[derive(Debug, PartialEq, Clone)]
+        pub enum UnionEventMetadataEventTypeIntNullStringTimestamp {
+            Null(()),
+            String(String),
+            Int(i32),
+            EventMetadata(EventMetadata),
+            EventType(EventType),
+            TimestampMicros(chrono::DateTime<chrono::Utc>),
+        }
+        impl From<()> for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: ()) -> Self {
+                Self::Null(v)
+            }
+        }
+        impl From<String> for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: String) -> Self {
+                Self::String(v)
+            }
+        }
+        impl From<i32> for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: i32) -> Self {
+                Self::Int(v)
+            }
+        }
+        impl From<EventMetadata> for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: EventMetadata) -> Self {
+                Self::EventMetadata(v)
+            }
+        }
+        impl From<EventType> for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: EventType) -> Self {
+                Self::EventType(v)
+            }
+        }
+        impl From<chrono::DateTime<chrono::Utc>>
+        for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn from(v: chrono::DateTime<chrono::Utc>) -> Self {
+                Self::TimestampMicros(v)
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp> for () {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::Null(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp> for String {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::String(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp> for i32 {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::Int(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp>
+        for EventMetadata {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::EventMetadata(
+                    v,
+                ) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp> for EventType {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::EventType(v) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl TryFrom<UnionEventMetadataEventTypeIntNullStringTimestamp>
+        for chrono::DateTime<chrono::Utc> {
+            type Error = UnionEventMetadataEventTypeIntNullStringTimestamp;
+            fn try_from(
+                v: UnionEventMetadataEventTypeIntNullStringTimestamp,
+            ) -> Result<Self, Self::Error> {
+                if let UnionEventMetadataEventTypeIntNullStringTimestamp::TimestampMicros(
+                    v,
+                ) = v {
+                    Ok(v)
+                } else {
+                    Err(v)
+                }
+            }
+        }
+        impl serde::Serialize for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                match self {
+                    Self::Null(value) => value.serialize(serializer),
+                    Self::String(value) => value.serialize(serializer),
+                    Self::Int(value) => value.serialize(serializer),
+                    Self::EventMetadata(value) => value.serialize(serializer),
+                    Self::EventType(value) => value.serialize(serializer),
+                    Self::TimestampMicros(value) => value.serialize(serializer),
+                }
+            }
+        }
+        impl<'de> serde::Deserialize<'de>
+        for UnionEventMetadataEventTypeIntNullStringTimestamp {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct UnionVisitor;
+                impl<'de> serde::de::Visitor<'de> for UnionVisitor {
+                    type Value = UnionEventMetadataEventTypeIntNullStringTimestamp;
+                    fn expecting(
+                        &self,
+                        formatter: &mut std::fmt::Formatter,
+                    ) -> std::fmt::Result {
+                        formatter::write_str(
+                            format!(
+                                " {}",
+                                stringify!(UnionEventMetadataEventTypeIntNullStringTimestamp)
+                            )
+                                .as_str(),
+                        )
+                    }
+                    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        Ok(
+                            UnionEventMetadataEventTypeIntNullStringTimestamp::String(
+                                value.into(),
+                            ),
+                        )
+                    }
+                    fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        Ok(
+                            UnionEventMetadataEventTypeIntNullStringTimestamp::Int(
+                                value.into(),
+                            ),
+                        )
+                    }
+                }
+                deserializer.deserialize_any(UnionVisitor)
+            }
+        }
+    }
+}

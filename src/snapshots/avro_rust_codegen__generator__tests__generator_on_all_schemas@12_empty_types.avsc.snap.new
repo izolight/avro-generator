@@ -1,0 +1,12 @@
+---
+source: src/generator.rs
+assertion_line: 1294
+expression: formatted_code
+input_file: src/test_schemas/12_empty_types.avsc
+---
+use serde::{Serialize, Deserialize};
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub enum EmptyEnum {}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct EmptyRecord {}
+pub type ZeroFixed = [u8; 0usize];

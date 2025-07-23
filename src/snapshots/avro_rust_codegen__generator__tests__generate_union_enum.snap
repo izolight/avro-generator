@@ -2,8 +2,8 @@
 source: src/generator.rs
 expression: formatted_code
 ---
+use serde::{Serialize, Deserialize};
 #[derive(Debug, PartialEq, Clone)]
-#[serde(remote = "Self")]
 pub enum UnionBooleanIntString {
     String(String),
     Int(i32),

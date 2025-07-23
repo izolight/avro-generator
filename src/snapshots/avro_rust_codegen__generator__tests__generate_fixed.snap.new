@@ -1,6 +1,6 @@
 ---
 source: src/generator.rs
+assertion_line: 1237
 expression: formatted_code
 ---
-use serde::{Serialize, Deserialize};
 pub type Md5 = [u8; 16usize];

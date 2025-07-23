@@ -1,0 +1,21 @@
+---
+source: src/generator.rs
+assertion_line: 1294
+expression: formatted_code
+input_file: src/test_schemas/02_logical_types.avsc
+---
+pub mod com {
+    pub mod example {
+        pub mod logical {
+            use serde::{Serialize, Deserialize};
+            #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+            pub struct EventLog {
+                pub event_id: uuid::Uuid,
+                pub event_date: chrono::NaiveDate,
+                pub event_time: chrono::Duration,
+                pub created_at: chrono::DateTime<chrono::Utc>,
+                pub total_amount: rust_decimal::Decimal,
+            }
+        }
+    }
+}
